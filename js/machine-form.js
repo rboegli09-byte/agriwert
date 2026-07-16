@@ -46,26 +46,29 @@ let ctx = null;
  * @param {object} optionen       { machine, state, onClose, onGespeichert }
  */
 export async function renderMaschine(host, optionen) {
-  const neu = !optionen.machine;
+  // Eine Maschine existiert in der Datenbank immer schon – auch eine neue.
+  // Sie ist dann als "entwurf" markiert und für Liste/Dashboard unsichtbar.
+  // Dadurch sind alle Reiter von Anfang an nutzbar.
+  const istEntwurf = optionen.machine?.entwurf === true;
+
   ctx = {
     host,
     state: optionen.state,
-    machine: optionen.machine ? { ...optionen.machine } : null,
-    neu,
+    machine: { ...optionen.machine },
+    neu: istEntwurf,
     onClose: optionen.onClose,
     onGespeichert: optionen.onGespeichert,
     tab: 'stammdaten',
-    // Eine bestehende Maschine öffnet sich zum ANSEHEN. Erst der Stift oben
-    // rechts schaltet aufs Bearbeiten. Eine neue Maschine ist logischerweise
-    // sofort im Bearbeitungsmodus.
-    modus: neu ? 'bearbeiten' : 'ansicht',
+    // Ein Entwurf wird logischerweise bearbeitet. Eine bestehende Maschine
+    // öffnet sich zum ANSEHEN – erst der Stift oben rechts schaltet um.
+    modus: istEntwurf ? 'bearbeiten' : 'ansicht',
     daten: { baugruppen: [], reifen: [], schaeden: [], fotos: [], kommentare: [], aufgaben: [], vergleiche: [], verlauf: [] },
     profile: [],
-    pendingFotos: [],     // Fotos einer noch nicht gespeicherten Maschine
+    pendingFotos: [],
     entwurf: {},          // Stammdaten-Eingaben, solange nicht gespeichert
   };
 
-  if (!ctx.neu) await ladeDetails();
+  await ladeDetails();
   zeichne();
 }
 
@@ -116,21 +119,20 @@ function zeichne() {
   const m = aktuelleMaschine();
   const titel = [m.hersteller || m.marke, m.modell].filter(Boolean).join(' ') || 'Neue Maschine';
 
-  // Bei einer neuen Maschine gibt es die Unterbereiche noch nicht – sie hängen
-  // an einer Maschinen-ID, die erst beim Speichern entsteht.
-  const tabs = ctx.neu
-    ? [['stammdaten', 'Stammdaten'], ['ausstattung', 'Ausstattung'], ['fotos', 'Fotos']]
-    : [
-        ['stammdaten', 'Stammdaten'], ['ausstattung', 'Ausstattung'],
-        ['baugruppen', `Baugruppen (${bewerteteBaugruppen()}/${ctx.daten.baugruppen.length})`],
-        ['reifen', `Reifen (${ctx.daten.reifen.length})`],
-        ['schaeden', `Schäden (${ctx.daten.schaeden.length})`],
-        ['fotos', `Fotos (${ctx.daten.fotos.length})`],
-        ['kommentare', `Kommentare (${ctx.daten.kommentare.length})`],
-        ['aufgaben', `Aufgaben (${offeneAufgaben()})`],
-        ['vergleich', `Marktvergleich (${ctx.daten.vergleiche.length})`],
-        ['verlauf', 'Verlauf'],
-      ];
+  // Alle Reiter sind immer da – auch beim Erstellen. Möglich, weil auch eine
+  // neue Maschine bereits eine ID in der Datenbank hat (siehe Entwurf).
+  const tabs = [
+    ['stammdaten', 'Stammdaten'],
+    ['ausstattung', 'Ausstattung'],
+    ['baugruppen', `Baugruppen (${bewerteteBaugruppen()}/${ctx.daten.baugruppen.length})`],
+    ['reifen', `Reifen (${ctx.daten.reifen.length})`],
+    ['schaeden', `Schäden (${ctx.daten.schaeden.length})`],
+    ['fotos', `Fotos (${ctx.daten.fotos.length + ctx.pendingFotos.length})`],
+    ['kommentare', `Kommentare (${ctx.daten.kommentare.length})`],
+    ['aufgaben', `Aufgaben (${offeneAufgaben()})`],
+    ['vergleich', `Marktvergleich (${ctx.daten.vergleiche.length})`],
+    ['verlauf', 'Verlauf'],
+  ];
 
   ctx.host.innerHTML = `
     <div class="detail-kopf">
@@ -141,7 +143,9 @@ function zeichne() {
       </div>
 
       <div class="detail-werkzeuge">
-        ${ctx.neu ? '' : `
+        ${ctx.neu ? `
+          <button class="btn-danger" id="verwerfen-btn" title="Erfassung abbrechen">Verwerfen</button>
+        ` : `
           <button class="btn-sekundaer" id="excel-btn" title="Diese Maschine als Excel-Datei exportieren">
             ${ICON_EXCEL}<span>Excel</span>
           </button>
@@ -158,8 +162,12 @@ function zeichne() {
       <div id="bewertung-panel"></div>
     </div>
 
-    ${bearbeitbar() && !ctx.neu
-      ? '<div class="modus-band">Bearbeitungsmodus – Änderungen werden gespeichert.</div>' : ''}
+    ${ctx.neu
+      ? `<div class="modus-band entwurf-band">Neue Maschine – alle Reiter sind nutzbar.
+           Sie erscheint erst in der Liste, wenn du unter <b>Stammdaten</b> auf
+           <b>Maschine anlegen</b> klickst.</div>`
+      : bearbeitbar()
+        ? '<div class="modus-band">Bearbeitungsmodus – Änderungen werden gespeichert.</div>' : ''}
 
     <nav class="untertabs">
       ${tabs.map(([id, label]) =>
@@ -179,6 +187,7 @@ function zeichne() {
     setzeModus('ansicht');
   });
   $('#excel-btn', ctx.host)?.addEventListener('click', excelExportieren);
+  $('#verwerfen-btn', ctx.host)?.addEventListener('click', verwerfeEntwurf);
 
   zeichneBewertung();
   zeichneInhalt();
@@ -354,18 +363,11 @@ function zeichneStammdaten(c) {
           placeholder="Bemerkungen, Besonderheiten …">${esc(m.notizen || '')}</textarea>
       </fieldset>
 
-      ${ctx.neu ? `
-        <fieldset><legend>Zustand (vorläufig)</legend>
-          <label>Gesamtzustand: <b id="z-wert">${m.zustand_gesamt ?? 5}</b> / 10
-            <input type="range" name="zustand_gesamt" min="1" max="10" value="${m.zustand_gesamt ?? 5}" id="z-slider">
-          </label>
-          <p class="mini-hinweis">Nach dem Anlegen wird der Zustand aus den einzelnen
-            Baugruppen berechnet und ersetzt diesen Wert.</p>
-        </fieldset>` : ''}
-
       <div class="formular-aktionen">
-        <button type="submit" class="btn-primary btn-gross">${ctx.neu ? 'Maschine anlegen' : 'Stammdaten speichern'}</button>
-        ${ctx.neu ? '' : '<button type="button" id="loeschen" class="btn-danger">Maschine löschen</button>'}
+        <button type="submit" class="btn-primary btn-gross">${ctx.neu ? 'Maschine anlegen' : 'Speichern'}</button>
+        ${ctx.neu
+          ? '<button type="button" id="verwerfen2" class="btn-klein">Abbrechen</button>'
+          : '<button type="button" id="loeschen" class="btn-danger">Maschine löschen</button>'}
         <span class="fehler" id="stamm-fehler"></span>
         <span class="ok" id="stamm-ok"></span>
       </div>
@@ -376,7 +378,6 @@ function zeichneStammdaten(c) {
   // Eingaben live in den Entwurf übernehmen -> Bewertungs-Panel rechnet mit
   form.addEventListener('input', () => {
     Object.assign(ctx.entwurf, stammdatenAusFormular(form));
-    if ($('#z-slider', c)) $('#z-wert', c).textContent = $('#z-slider', c).value;
     zeigeKategorieHinweis(c);
     zeichneBewertung();
   });
@@ -388,7 +389,8 @@ function zeichneStammdaten(c) {
   zeigeKategorieHinweis(c);
 
   form.addEventListener('submit', (e) => { e.preventDefault(); speichereStammdaten(form); });
-  if (!ctx.neu) $('#loeschen', c).addEventListener('click', loescheMaschine);
+  $('#loeschen', c)?.addEventListener('click', loescheMaschine);
+  $('#verwerfen2', c)?.addEventListener('click', verwerfeEntwurf);
 }
 
 // ----------------------------------------------------------------------------
@@ -549,23 +551,13 @@ async function speichereStammdaten(form) {
 
   const daten = { ...stammdatenAusFormular(form), ...bewertungsFelder() };
 
+  // Ein Entwurf wird mit dem Speichern zur richtigen Maschine und taucht
+  // ab dann in Liste und Dashboard auf.
+  const warEntwurf = ctx.neu;
+  if (warEntwurf) daten.entwurf = false;
+
   try {
     await merkeNeueMarke(daten.hersteller);
-    if (ctx.neu) {
-      daten.created_by = ctx.state.user.id;
-      const { data, error } = await supabase.from('machines').insert(daten).select().single();
-      if (error) throw error;
-      ctx.machine = data;
-      ctx.neu = false;
-      ctx.entwurf = {};
-      await ladePendingFotos(data.id);
-      await ladeDetails();          // Baugruppen wurden per Trigger angelegt
-      ctx.onGespeichert?.();
-      // Frisch angelegt -> gleich in die Nur-Lese-Ansicht wechseln
-      ctx.modus = 'ansicht';
-      zeichne();
-      return;
-    }
 
     // --- Konflikterkennung -------------------------------------------------
     // Nur speichern, wenn die Version noch die ist, die wir geladen haben.
@@ -583,6 +575,7 @@ async function speichereStammdaten(form) {
     }
 
     ctx.machine = data[0];
+    ctx.neu = false;
     ctx.entwurf = {};
     ctx.onGespeichert?.();
     // Nach dem Speichern zurück in die Nur-Lese-Ansicht – die Bearbeitung
@@ -651,6 +644,24 @@ async function zeigeKonflikt() {
     $('#stamm-fehler', ctx.host).textContent =
       `Nicht gespeichert – ${wer} hat die Maschine inzwischen geändert. Kopiere deine Eingaben und lade neu.`;
   }
+}
+
+/**
+ * Erfassung abbrechen: Der Entwurf wird samt Fotos und Baugruppen gelöscht.
+ * Ohne das bliebe eine leere Maschine für immer unsichtbar in der Datenbank
+ * liegen und würde Speicher belegen.
+ */
+async function verwerfeEntwurf() {
+  const hatInhalt = ctx.daten.fotos.length || ctx.daten.reifen.length ||
+    ctx.daten.schaeden.length || Object.keys(ctx.entwurf).length;
+
+  if (hatInhalt && !confirm('Erfassung abbrechen? Alle Eingaben und Fotos dieser neuen Maschine gehen verloren.')) return;
+
+  try {
+    await loescheAlleFotosVonMaschine(ctx.machine.id);
+    await supabase.from('machines').delete().eq('id', ctx.machine.id);
+  } catch { /* Entwurf war ohnehin unsichtbar – nicht weiter stören */ }
+  ctx.onClose();
 }
 
 /**
@@ -1123,30 +1134,14 @@ function zeichneFotos(c) {
   bindeGalerieAktionen(c);
 }
 
-/**
- * Inhalt der Galerie: bereits hochgeladene Fotos UND die einer noch nicht
- * gespeicherten Maschine, die nur vorgemerkt sind. Letztere haben noch keine
- * Adresse im Speicher – wir zeigen sie direkt aus der gewählten Datei an.
- */
 function galerieInhalt() {
-  const gespeichert = ctx.daten.fotos.map((f) => fotoHtml(f, true)).join('');
-  const vorgemerkt = ctx.pendingFotos.map((p, i) => `
-    <figure class="foto vorgemerkt">
-      <img src="${p.vorschauUrl}" alt="${esc(p.kategorie)}"
-           data-gross="${p.vorschauUrl}" data-titel="${esc(p.kategorie)}">
-      <figcaption>${esc(p.kategorie)}</figcaption>
-      <span class="foto-marke">wird beim Anlegen hochgeladen</span>
-      <button type="button" class="foto-x" data-pending="${i}">×</button>
-    </figure>`).join('');
-
-  const alles = gespeichert + vorgemerkt;
-  return alles || '<p class="mini-hinweis">Noch keine Fotos.</p>';
+  return ctx.daten.fotos.map((f) => fotoHtml(f, true)).join('')
+    || '<p class="mini-hinweis">Noch keine Fotos.</p>';
 }
 
 function bindeGalerieAktionen(c) {
   bindeFotoLightbox(c);
 
-  // Hochgeladenes Foto löschen
   $$('.foto-x[data-foto]', c).forEach((b) =>
     b.addEventListener('click', async () => {
       if (!confirm('Foto endgültig löschen?')) return;
@@ -1158,16 +1153,6 @@ function bindeGalerieAktionen(c) {
       } catch (err) {
         $('#foto-status', c).textContent = 'Foto konnte nicht gelöscht werden: ' + (err.message || err);
       }
-    })
-  );
-
-  // Vorgemerktes Foto wieder entfernen
-  $$('.foto-x[data-pending]', c).forEach((b) =>
-    b.addEventListener('click', () => {
-      const i = Number(b.dataset.pending);
-      URL.revokeObjectURL(ctx.pendingFotos[i].vorschauUrl);   // Speicher freigeben
-      ctx.pendingFotos.splice(i, 1);
-      zeichne();
     })
   );
 }
@@ -1208,22 +1193,15 @@ function bindeFotoLightbox(wurzel) {
   );
 }
 
+/**
+ * Fotos hochladen. Funktioniert auch bei einer brandneuen Maschine, weil der
+ * Entwurf bereits eine ID in der Datenbank hat.
+ */
 async function handleFotos(fileList, c) {
   const dateien = [...fileList];
   if (dateien.length === 0) return;
   const kategorie = $('#foto-kategorie', c).value;
   const status = $('#foto-status', c);
-
-  // Neue Maschine: es gibt noch keine ID, an der ein Foto hängen könnte.
-  // Wir merken die Datei vor und zeigen sie SOFORT als Vorschau an.
-  if (ctx.neu) {
-    dateien.forEach((datei) => ctx.pendingFotos.push({
-      datei, kategorie,
-      vorschauUrl: URL.createObjectURL(datei),
-    }));
-    zeichne();
-    return;
-  }
 
   status.textContent = `Lade ${dateien.length} Foto(s) hoch …`;
   try {
@@ -1240,17 +1218,6 @@ async function handleFotos(fileList, c) {
   } catch (err) {
     status.textContent = 'Fehler beim Hochladen: ' + (err.message || err);
   }
-}
-
-async function ladePendingFotos(machineId) {
-  for (const { datei, kategorie, vorschauUrl } of ctx.pendingFotos) {
-    const pfad = await ladeFotoHoch(datei, machineId, ctx.state.user.id);
-    await supabase.from('machine_photos').insert({
-      machine_id: machineId, storage_path: pfad, kategorie, created_by: ctx.state.user.id,
-    });
-    URL.revokeObjectURL(vorschauUrl);   // Vorschau wird nicht mehr gebraucht
-  }
-  ctx.pendingFotos = [];
 }
 
 // ----------------------------------------------------------------------------

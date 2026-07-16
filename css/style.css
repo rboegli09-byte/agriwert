@@ -526,6 +526,8 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
   border-left: 3px solid var(--akzent); border-radius: var(--radius);
   padding: 0.5rem 0.9rem; margin-bottom: 0.8rem; font-size: 0.9rem; font-weight: 500;
 }
+.modus-band.entwurf-band { font-weight: 400; }
+.modus-band b { font-weight: 600; }
 
 /* --- Nur-Lese-Ansicht ------------------------------------------------------ */
 .ansicht-block { margin-bottom: 1.6rem; }

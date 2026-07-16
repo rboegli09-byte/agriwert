@@ -248,11 +248,40 @@ async function ladeListen() {
 }
 
 async function ladeMaschinen() {
+  // Entwürfe (noch nicht angelegte Maschinen) gehören nicht in die Liste.
   const { data } = await supabase
     .from('machines')
     .select('*')
+    .eq('entwurf', false)
     .order('updated_at', { ascending: false });
   state.machines = data ?? [];
+}
+
+/**
+ * Legt sofort einen Entwurf an und öffnet ihn.
+ *
+ * Warum überhaupt ein Entwurf? Baugruppen, Reifen, Schäden, Fotos usw. hängen
+ * alle an einer Maschinen-ID. Ohne gespeicherte Maschine gäbe es diese ID
+ * nicht – man könnte diese Reiter erst nach dem Speichern benutzen. Mit dem
+ * Entwurf sind ALLE Reiter von der ersten Sekunde an nutzbar.
+ *
+ * Der Entwurf ist unsichtbar für die Liste und das Dashboard, bis er über
+ * "Maschine anlegen" richtig angelegt wird.
+ */
+async function neueMaschine() {
+  const { data, error } = await supabase.from('machines').insert({
+    created_by: state.user.id,
+    entwurf: true,
+    zustand_gesamt: 5,
+  }).select().single();
+
+  if (error) {
+    alert('Die Maschine konnte nicht angelegt werden: ' + error.message);
+    return;
+  }
+  state.editMachine = data;
+  state.tab = 'bearbeiten';
+  render();
 }
 
 // Echtzeit: sobald jemand eine Maschine ändert, neu laden
@@ -296,7 +325,14 @@ function render() {
     <main id="content"></main>`;
 
   app().querySelectorAll('.tabs button').forEach((b) =>
-    b.addEventListener('click', () => { state.tab = b.dataset.tab; state.editMachine = null; render(); })
+    b.addEventListener('click', () => {
+      // "Neue Maschine" legt sofort einen Entwurf an, damit alle Reiter
+      // (Baugruppen, Reifen, Schäden …) von Anfang an nutzbar sind.
+      if (b.dataset.tab === 'neu') { neueMaschine(); return; }
+      state.tab = b.dataset.tab;
+      state.editMachine = null;
+      render();
+    })
   );
   $('#logout').addEventListener('click', () => supabase.auth.signOut());
 
@@ -331,7 +367,7 @@ function renderListe() {
   if (state.machines.length === 0) {
     c.innerHTML = `<div class="leer">Noch keine Maschinen erfasst.
       <button class="btn-primary" id="leer-neu">Erste Maschine anlegen</button></div>`;
-    $('#leer-neu').addEventListener('click', () => { state.tab = 'neu'; render(); });
+    $('#leer-neu').addEventListener('click', neueMaschine);
     return;
   }
 
