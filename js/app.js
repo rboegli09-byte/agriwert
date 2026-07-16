@@ -22,11 +22,18 @@ import { esc } from './util.js';
 const state = {
   user: null,        // auth-Benutzer
   profile: null,     // Zeile aus profiles (mit Rolle)
-  settings: null,    // Preis-Faktoren
+  settings: null,    // globale Preis-Faktoren
+  kategorien: [],    // Maschinentypen (Traktoren, Heuernte …) – eigene Faktoren möglich
+  marken: [],        // Herstellerliste für die Auswahl
   machines: [],      // alle Maschinen
-  tab: 'liste',      // aktueller Reiter
+  tab: 'dashboard',  // aktueller Reiter
   editMachine: null, // Maschine, die gerade bearbeitet wird
 };
+
+/** Kategorie-Zeile zu einer Maschine (für die Preisberechnung). */
+export function kategorieVon(maschine) {
+  return state.kategorien.find((k) => k.id === maschine?.kategorie_id) ?? null;
+}
 
 const $ = (sel) => document.querySelector(sel);
 const app = () => $('#app');
@@ -212,9 +219,10 @@ function registrierFehlerText(error) {
 // Nach dem Login: Daten laden + App aufbauen
 // ============================================================================
 async function nachLogin() {
-  await Promise.all([ladeProfil(), ladeSettings(), ladeMaschinen()]);
+  await Promise.all([ladeProfil(), ladeSettings(), ladeListen(), ladeMaschinen()]);
   // Dashboard-Zeilen sollen eine Maschine öffnen können
   state.oeffneMaschine = oeffneMaschine;
+  state.kategorieVon = kategorieVon;
   abonniereEchtzeit();
   render();
 }
@@ -227,6 +235,16 @@ async function ladeProfil() {
 async function ladeSettings() {
   const { data } = await supabase.from('settings').select('*').eq('id', 1).single();
   state.settings = data;
+}
+
+/** Kategorien und Marken laden (Auswahllisten im Formular). */
+async function ladeListen() {
+  const [k, m] = await Promise.all([
+    supabase.from('kategorien').select('*').order('sortierung').order('name'),
+    supabase.from('marken').select('*').order('name'),
+  ]);
+  state.kategorien = k.data ?? [];
+  state.marken = m.data ?? [];
 }
 
 async function ladeMaschinen() {
@@ -302,7 +320,7 @@ const tabCls = (t) => (state.tab === t || (t === 'neu' && state.tab === 'bearbei
 
 /** Aktive Filter (bleiben erhalten, solange man im Reiter bleibt). */
 const filter = {
-  text: '', hersteller: '', baujahrVon: '', baujahrBis: '',
+  text: '', kategorie: '', hersteller: '', baujahrVon: '', baujahrBis: '',
   stundenMax: '', zustandMin: '', standort: '', preisVon: '', preisBis: '',
   sort: 'updated', erweitert: false,
 };
@@ -330,10 +348,20 @@ function renderListe() {
         <option value="stunden-tief">Betriebsstunden: wenig → viel</option>
         <option value="zustand-hoch">Zustand: gut → schlecht</option>
       </select>
-      <button type="button" id="f-toggle" class="btn-sekundaer">Filter${anzahlAktiveFilter() ? ` (${anzahlAktiveFilter()})` : ''}</button>
+      <button type="button" id="f-toggle" class="btn-sekundaer">
+        ${filter.erweitert ? 'Filter ausblenden' : 'Filter anzeigen'}${anzahlAktiveFilter() ? ` (${anzahlAktiveFilter()})` : ''}
+      </button>
     </div>
 
     <div class="filter-erweitert" id="filter-erweitert" ${filter.erweitert ? '' : 'hidden'}>
+      <label>Kategorie
+        <select id="f-kategorie">
+          <option value="">alle</option>
+          ${state.kategorien.map((k) => `
+            <option value="${k.id}" ${filter.kategorie === k.id ? 'selected' : ''}>${esc(k.name)}</option>`).join('')}
+          <option value="__ohne" ${filter.kategorie === '__ohne' ? 'selected' : ''}>ohne Kategorie</option>
+        </select>
+      </label>
       <label>Hersteller
         <select id="f-hersteller">
           <option value="">alle</option>
@@ -360,19 +388,22 @@ function renderListe() {
 
   bind('#f-text', 'text');
   bind('#f-sort', 'sort', 'change');
+  bind('#f-kategorie', 'kategorie', 'change');
   bind('#f-hersteller', 'hersteller', 'change');
   ['baujahrVon', 'baujahrBis', 'stundenMax', 'zustandMin', 'standort', 'preisVon', 'preisBis']
     .forEach((k) => bind(`#f-${k}`, k));
 
-  $('#f-toggle').addEventListener('click', () => {
+  $('#f-toggle').addEventListener('click', (e) => {
     filter.erweitert = !filter.erweitert;
     $('#filter-erweitert').hidden = !filter.erweitert;
+    e.target.textContent = (filter.erweitert ? 'Filter ausblenden' : 'Filter anzeigen')
+      + (anzahlAktiveFilter() ? ` (${anzahlAktiveFilter()})` : '');
   });
 
   $('#f-reset').addEventListener('click', () => {
     Object.assign(filter, {
-      text: '', hersteller: '', baujahrVon: '', baujahrBis: '', stundenMax: '',
-      zustandMin: '', standort: '', preisVon: '', preisBis: '',
+      text: '', kategorie: '', hersteller: '', baujahrVon: '', baujahrBis: '',
+      stundenMax: '', zustandMin: '', standort: '', preisVon: '', preisBis: '',
     });
     renderListe();
   });
@@ -382,7 +413,8 @@ function renderListe() {
 
 /** Zählt, wie viele der erweiterten Filter gesetzt sind (für die Anzeige am Knopf). */
 function anzahlAktiveFilter() {
-  return ['hersteller', 'baujahrVon', 'baujahrBis', 'stundenMax', 'zustandMin', 'standort', 'preisVon', 'preisBis']
+  return ['kategorie', 'hersteller', 'baujahrVon', 'baujahrBis', 'stundenMax',
+    'zustandMin', 'standort', 'preisVon', 'preisBis']
     .filter((k) => filter[k] !== '').length;
 }
 
@@ -402,6 +434,8 @@ function filtereMaschinen() {
         .filter(Boolean).join(' ').toLowerCase();
       if (!heuhaufen.includes(text)) return false;
     }
+    if (filter.kategorie === '__ohne' && m.kategorie_id) return false;
+    if (filter.kategorie && filter.kategorie !== '__ohne' && m.kategorie_id !== filter.kategorie) return false;
     if (filter.hersteller && m.hersteller !== filter.hersteller) return false;
     if (bjVon !== null && (m.baujahr ?? -Infinity) < bjVon) return false;
     if (bjBis !== null && (m.baujahr ?? Infinity) > bjBis) return false;
@@ -456,6 +490,7 @@ function kartenHtml(m) {
         ${m.zustandsindex != null ? `<span class="index-badge" title="Zustandsindex">${m.zustandsindex}</span>` : ''}
       </div>
       <div class="karte-daten">
+        ${kategorieVon(m) ? `<span class="kat-tag">${esc(kategorieVon(m).name)}</span>` : ''}
         ${m.typ ? `<span>${esc(m.typ)}</span>` : ''}
         ${m.baujahr ? `<span>Bj. ${m.baujahr}</span>` : ''}
         ${m.betriebsstunden != null ? `<span>${m.betriebsstunden} h</span>` : ''}
@@ -560,7 +595,47 @@ function renderEinstellungen() {
         <span class="fehler" id="s-fehler"></span>
         <span class="ok" id="s-ok"></span>
       </div>
-    </form>`;
+    </form>
+
+    <div class="formular" style="margin-top:1rem">
+      <h2>Kategorien</h2>
+      <p class="mini-hinweis">Maschinentypen für die Einordnung. Die Faktoren gelten
+        nur für diese Kategorie und übersteuern die allgemeinen oben.
+        <b>Leer lassen = allgemeinen Wert verwenden.</b>
+        Beispiel: Heuernte verliert schneller an Wert als ein Traktor.</p>
+
+      <div class="kat-kopf">
+        <span>Name</span><span>% / Jahr</span><span>% / 100 h</span><span>Min. Restwert %</span><span></span>
+      </div>
+      <div id="kat-liste"></div>
+      <button type="button" class="btn-sekundaer" id="kat-add">Kategorie hinzufügen</button>
+      <span class="fehler" id="kat-fehler"></span>
+    </div>
+
+    <div class="formular" style="margin-top:1rem">
+      <h2>Marken</h2>
+      <p class="mini-hinweis">Vorschläge für das Hersteller-Feld. Neue Marken werden
+        beim Erfassen automatisch übernommen – hier kannst du aufräumen.</p>
+      <div id="marken-liste-verwaltung" class="marken-wolke"></div>
+    </div>`;
+
+  zeichneKategorien();
+  zeichneMarkenVerwaltung();
+
+  $('#kat-add').addEventListener('click', async () => {
+    const name = prompt('Name der neuen Kategorie (z. B. Heuernte):');
+    if (!name || !name.trim()) return;
+    const { data, error } = await supabase.from('kategorien')
+      .insert({ name: name.trim(), sortierung: (state.kategorien.length + 1) * 10 })
+      .select().single();
+    if (error) {
+      $('#kat-fehler').textContent = error.code === '23505'
+        ? 'Diese Kategorie gibt es schon.' : 'Fehler: ' + error.message;
+      return;
+    }
+    state.kategorien.push(data);
+    zeichneKategorien();
+  });
 
   $('#zuschlag-add').addEventListener('click', () => {
     $('#zuschlaege').insertAdjacentHTML('beforeend', zuschlagZeile('', 0));
@@ -568,6 +643,84 @@ function renderEinstellungen() {
   });
   bindeZuschlagEntfernen();
   $('#sform').addEventListener('submit', speichereEinstellungen);
+}
+
+/**
+ * Kategorien-Verwaltung. Jede Zeile speichert sofort beim Verlassen des Felds.
+ * Leere Faktor-Felder bedeuten bewusst "allgemeinen Wert verwenden" – darum
+ * wird '' zu NULL und nicht zu 0 (0 % wäre "gar kein Wertverlust").
+ */
+function zeichneKategorien() {
+  const ziel = $('#kat-liste');
+  if (!ziel) return;
+
+  ziel.innerHTML = state.kategorien.map((k) => `
+    <div class="kat-zeile" data-id="${k.id}">
+      <input type="text" data-feld="name" value="${esc(k.name)}">
+      <input type="number" step="any" data-feld="wertverlust_jahr_prozent"
+             value="${k.wertverlust_jahr_prozent ?? ''}" placeholder="allg.">
+      <input type="number" step="any" data-feld="wertverlust_pro_100h_prozent"
+             value="${k.wertverlust_pro_100h_prozent ?? ''}" placeholder="allg.">
+      <input type="number" step="any" data-feld="mindest_restwert_prozent"
+             value="${k.mindest_restwert_prozent ?? ''}" placeholder="allg.">
+      <button type="button" class="btn-x kat-x" title="Kategorie löschen">×</button>
+    </div>`).join('') || '<p class="mini-hinweis">Noch keine Kategorien.</p>';
+
+  ziel.querySelectorAll('.kat-zeile').forEach((zeile) => {
+    const k = state.kategorien.find((x) => x.id === zeile.dataset.id);
+
+    zeile.querySelectorAll('[data-feld]').forEach((eingabe) =>
+      eingabe.addEventListener('change', async () => {
+        const feld = eingabe.dataset.feld;
+        // Leeres Zahlenfeld -> NULL (= allgemeinen Wert verwenden), nicht 0
+        k[feld] = feld === 'name'
+          ? eingabe.value.trim()
+          : (eingabe.value.trim() === '' ? null : parseFloat(eingabe.value));
+
+        const { error } = await supabase.from('kategorien')
+          .update({ [feld]: k[feld] }).eq('id', k.id);
+        $('#kat-fehler').textContent = error
+          ? (error.code === '23505' ? 'Diesen Namen gibt es schon.' : 'Fehler: ' + error.message)
+          : '';
+      })
+    );
+
+    zeile.querySelector('.kat-x').addEventListener('click', async () => {
+      const anzahl = state.machines.filter((m) => m.kategorie_id === k.id).length;
+      if (!confirm(anzahl
+        ? `„${k.name}" löschen?\n\n${anzahl} Maschine(n) verlieren dadurch ihre Kategorie und rechnen wieder mit den allgemeinen Faktoren. Die Maschinen selbst bleiben erhalten.`
+        : `„${k.name}" löschen?`)) return;
+
+      const { error } = await supabase.from('kategorien').delete().eq('id', k.id);
+      if (error) { $('#kat-fehler').textContent = 'Fehler: ' + error.message; return; }
+      state.kategorien = state.kategorien.filter((x) => x.id !== k.id);
+      await ladeMaschinen();
+      zeichneKategorien();
+    });
+  });
+}
+
+/** Marken als Wolke mit Löschmöglichkeit. */
+function zeichneMarkenVerwaltung() {
+  const ziel = $('#marken-liste-verwaltung');
+  if (!ziel) return;
+
+  ziel.innerHTML = state.marken.map((m) => `
+    <span class="marke-chip" data-id="${m.id}">
+      ${esc(m.name)}<button type="button" title="Marke aus der Liste entfernen">×</button>
+    </span>`).join('') || '<p class="mini-hinweis">Noch keine Marken.</p>';
+
+  ziel.querySelectorAll('.marke-chip button').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const chip = b.closest('.marke-chip');
+      const m = state.marken.find((x) => x.id === chip.dataset.id);
+      if (!confirm(`„${m.name}" aus der Vorschlagsliste entfernen?\n\nBereits erfasste Maschinen behalten ihren Hersteller-Eintrag.`)) return;
+      const { error } = await supabase.from('marken').delete().eq('id', m.id);
+      if (error) { alert('Fehler: ' + error.message); return; }
+      state.marken = state.marken.filter((x) => x.id !== m.id);
+      zeichneMarkenVerwaltung();
+    })
+  );
 }
 
 function sfeld(name, label, wert) {

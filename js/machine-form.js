@@ -26,6 +26,17 @@ const REIFEN_POSITIONEN = [
 ];
 const PRIORITAETEN = ['hoch', 'mittel', 'tief'];
 
+// --- Symbole (schlicht, passend zur sachlichen Optik) -----------------------
+const svg = (inhalt) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+  aria-hidden="true" class="icon">${inhalt}</svg>`;
+
+const ICON_STIFT = svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>');
+const ICON_AUGE = svg('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>');
+const ICON_EXCEL = svg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="m9 13 6 6"/><path d="m15 13-6 6"/>');
+const ICON_KAMERA = svg('<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/>');
+const ICON_BILDER = svg('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>');
+
 // Modul-eigener Zustand der geöffneten Maschine
 let ctx = null;
 
@@ -35,22 +46,37 @@ let ctx = null;
  * @param {object} optionen       { machine, state, onClose, onGespeichert }
  */
 export async function renderMaschine(host, optionen) {
+  const neu = !optionen.machine;
   ctx = {
     host,
     state: optionen.state,
     machine: optionen.machine ? { ...optionen.machine } : null,
-    neu: !optionen.machine,
+    neu,
     onClose: optionen.onClose,
     onGespeichert: optionen.onGespeichert,
     tab: 'stammdaten',
+    // Eine bestehende Maschine öffnet sich zum ANSEHEN. Erst der Stift oben
+    // rechts schaltet aufs Bearbeiten. Eine neue Maschine ist logischerweise
+    // sofort im Bearbeitungsmodus.
+    modus: neu ? 'bearbeiten' : 'ansicht',
     daten: { baugruppen: [], reifen: [], schaeden: [], fotos: [], kommentare: [], aufgaben: [], vergleiche: [], verlauf: [] },
     profile: [],
-    pendingFotos: [],
+    pendingFotos: [],     // Fotos einer noch nicht gespeicherten Maschine
     entwurf: {},          // Stammdaten-Eingaben, solange nicht gespeichert
   };
 
   if (!ctx.neu) await ladeDetails();
   zeichne();
+}
+
+/** true, wenn gerade bearbeitet werden darf. */
+const bearbeitbar = () => ctx.modus === 'bearbeiten';
+
+/** Schaltet zwischen Ansehen und Bearbeiten um. */
+function setzeModus(modus) {
+  ctx.modus = modus;
+  zeichne();
+  ctx.host.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ============================================================================
@@ -108,13 +134,32 @@ function zeichne() {
 
   ctx.host.innerHTML = `
     <div class="detail-kopf">
-      <div>
+      <div class="detail-titel">
         <button class="btn-klein" id="zurueck">← Zurück zur Liste</button>
         <h2>${esc(titel)}</h2>
         ${ctx.neu ? '' : `<p class="mini-hinweis">Zuletzt geändert ${datumZeit(ctx.machine.updated_at)} · Version ${ctx.machine.version ?? 1}</p>`}
       </div>
+
+      <div class="detail-werkzeuge">
+        ${ctx.neu ? '' : `
+          <button class="btn-sekundaer" id="excel-btn" title="Diese Maschine als Excel-Datei exportieren">
+            ${ICON_EXCEL}<span>Excel</span>
+          </button>
+          ${bearbeitbar()
+            ? `<button class="btn-sekundaer" id="ansehen-btn" title="Bearbeitung beenden">
+                 ${ICON_AUGE}<span>Nur ansehen</span>
+               </button>`
+            : `<button class="btn-primary" id="bearbeiten-btn" title="Maschine bearbeiten">
+                 ${ICON_STIFT}<span>Bearbeiten</span>
+               </button>`}
+        `}
+      </div>
+
       <div id="bewertung-panel"></div>
     </div>
+
+    ${bearbeitbar() && !ctx.neu
+      ? '<div class="modus-band">Bearbeitungsmodus – Änderungen werden gespeichert.</div>' : ''}
 
     <nav class="untertabs">
       ${tabs.map(([id, label]) =>
@@ -128,6 +173,13 @@ function zeichne() {
     b.addEventListener('click', () => { ctx.tab = b.dataset.utab; zeichne(); })
   );
 
+  $('#bearbeiten-btn', ctx.host)?.addEventListener('click', () => setzeModus('bearbeiten'));
+  $('#ansehen-btn', ctx.host)?.addEventListener('click', () => {
+    ctx.entwurf = {};          // nicht gespeicherte Eingaben verwerfen
+    setzeModus('ansicht');
+  });
+  $('#excel-btn', ctx.host)?.addEventListener('click', excelExportieren);
+
   zeichneBewertung();
   zeichneInhalt();
 }
@@ -140,11 +192,24 @@ function aktuelleMaschine() {
   return { ...(ctx.machine ?? {}), ...ctx.entwurf };
 }
 
+/**
+ * Alles, was die Bewertung braucht: Baugruppen, Reifen, Schäden – und die
+ * Kategorie, deren Faktoren die globalen Einstellungen übersteuern.
+ */
+function bewertungsKontext() {
+  return { ...ctx.daten, kategorie: aktuelleKategorie() };
+}
+
+function aktuelleKategorie() {
+  const id = aktuelleMaschine().kategorie_id;
+  return (ctx.state.kategorien ?? []).find((k) => k.id === id) ?? null;
+}
+
 // ============================================================================
 // Bewertungs-Panel (immer sichtbar, rechnet live mit)
 // ============================================================================
 function zeichneBewertung() {
-  const r = bewerteMaschine(aktuelleMaschine(), ctx.daten, ctx.state.settings);
+  const r = bewerteMaschine(aktuelleMaschine(), bewertungsKontext(), ctx.state.settings);
   const p = $('#bewertung-panel', ctx.host);
   if (!p) return;
 
@@ -208,20 +273,45 @@ function zeichneInhalt() {
 // STAMMDATEN
 // ----------------------------------------------------------------------------
 function zeichneStammdaten(c) {
+  if (!bearbeitbar()) { zeichneStammdatenAnsicht(c); return; }
+
   const m = aktuelleMaschine();
   const f = (name, label, typ = 'text') => `
     <label>${label}
       <input type="${typ}" name="${name}" value="${m[name] != null ? esc(String(m[name])) : ''}">
     </label>`;
 
+  const kategorien = ctx.state.kategorien ?? [];
+  const marken = ctx.state.marken ?? [];
+
   c.innerHTML = `
     <form id="stamm-form">
+      <fieldset><legend>Einordnung</legend>
+        <div class="grid">
+          <label>Kategorie
+            <select name="kategorie_id">
+              <option value="">– bitte wählen –</option>
+              ${kategorien.map((k) => `
+                <option value="${k.id}" ${m.kategorie_id === k.id ? 'selected' : ''}>${esc(k.name)}</option>`).join('')}
+            </select>
+          </label>
+          <label>Hersteller
+            <input type="text" name="hersteller" list="marken-liste"
+                   value="${m.hersteller != null ? esc(String(m.hersteller)) : ''}"
+                   placeholder="wählen oder neu eintippen">
+          </label>
+          ${f('typ', 'Typ / Bezeichnung')}
+        </div>
+        <datalist id="marken-liste">
+          ${marken.map((k) => `<option value="${esc(k.name)}"></option>`).join('')}
+        </datalist>
+        <p class="mini-hinweis" id="kat-hinweis"></p>
+      </fieldset>
+
       <fieldset><legend>Identifikation</legend>
         <div class="grid">
-          ${f('hersteller', 'Hersteller')}
-          ${f('marke', 'Marke')}
+          ${f('marke', 'Marke (falls abweichend)')}
           ${f('modell', 'Modell')}
-          ${f('typ', 'Typ')}
           ${f('seriennummer', 'Seriennummer')}
           ${f('fahrgestellnummer', 'Fahrgestellnummer')}
         </div>
@@ -287,16 +377,152 @@ function zeichneStammdaten(c) {
   form.addEventListener('input', () => {
     Object.assign(ctx.entwurf, stammdatenAusFormular(form));
     if ($('#z-slider', c)) $('#z-wert', c).textContent = $('#z-slider', c).value;
+    zeigeKategorieHinweis(c);
     zeichneBewertung();
   });
+  form.addEventListener('change', () => {
+    Object.assign(ctx.entwurf, stammdatenAusFormular(form));
+    zeigeKategorieHinweis(c);
+    zeichneBewertung();
+  });
+  zeigeKategorieHinweis(c);
 
   form.addEventListener('submit', (e) => { e.preventDefault(); speichereStammdaten(form); });
   if (!ctx.neu) $('#loeschen', c).addEventListener('click', loescheMaschine);
 }
 
+// ----------------------------------------------------------------------------
+// STAMMDATEN – reine Anzeige (Standard beim Öffnen einer Maschine)
+// ----------------------------------------------------------------------------
+
+/** Definition der Anzeige: [Feldname, Beschriftung, Aufbereitung] */
+const ANZEIGE_GRUPPEN = [
+  ['Einordnung', [
+    ['kategorie', 'Kategorie'],
+    ['hersteller', 'Hersteller'],
+    ['marke', 'Marke'],
+    ['modell', 'Modell'],
+    ['typ', 'Typ / Bezeichnung'],
+  ]],
+  ['Identifikation', [
+    ['seriennummer', 'Seriennummer'],
+    ['fahrgestellnummer', 'Fahrgestellnummer'],
+  ]],
+  ['Alter und Einsatz', [
+    ['baujahr', 'Baujahr'],
+    ['erstzulassung', 'Erstzulassung', (v) => datum(v)],
+    ['betriebsstunden', 'Betriebsstunden', (v) => zahlMitEinheit(v, 'h')],
+    ['motorstunden', 'Motorstunden', (v) => zahlMitEinheit(v, 'h')],
+  ]],
+  ['Technik', [
+    ['motorleistung', 'Motorleistung', (v) => zahlMitEinheit(v, 'PS')],
+    ['hubraum', 'Hubraum', (v) => zahlMitEinheit(v, 'cm³')],
+    ['zylinder', 'Zylinder'],
+    ['gewicht', 'Gewicht', (v) => zahlMitEinheit(v, 'kg')],
+    ['steuerventile', 'Steuerventile'],
+  ]],
+  ['Zuordnung', [
+    ['standort', 'Standort'],
+    ['besitzer', 'Besitzer'],
+    ['neupreis', 'Neupreis', (v) => (v == null ? null : formatPreis(v, 'CHF'))],
+  ]],
+];
+
+function zahlMitEinheit(v, einheit) {
+  if (v == null || v === '') return null;
+  return `${Number(v).toLocaleString('de-CH')} ${einheit}`;
+}
+
+function zeichneStammdatenAnsicht(c) {
+  const m = aktuelleMaschine();
+  const kat = aktuelleKategorie();
+  const wert = (feld, aufbereiten) => {
+    const roh = feld === 'kategorie' ? (kat?.name ?? null) : m[feld];
+    if (roh === null || roh === undefined || roh === '') return null;
+    return aufbereiten ? aufbereiten(roh) : String(roh);
+  };
+
+  c.innerHTML = `
+    ${ANZEIGE_GRUPPEN.map(([titel, felder]) => {
+      const zeilen = felder
+        .map(([feld, label, auf]) => [label, wert(feld, auf)])
+        .filter(([, v]) => v !== null);
+      if (zeilen.length === 0) return '';
+      return `
+        <section class="ansicht-block">
+          <h3>${esc(titel)}</h3>
+          <dl class="datenliste">
+            ${zeilen.map(([label, v]) => `
+              <div><dt>${esc(label)}</dt><dd>${esc(v)}</dd></div>`).join('')}
+          </dl>
+        </section>`;
+    }).join('')}
+
+    ${textBlock('Servicehistorie', m.servicehistorie)}
+    ${textBlock('Notizen', m.notizen)}
+
+    <section class="ansicht-block">
+      <h3>Ausstattung</h3>
+      ${(Array.isArray(m.ausstattung) && m.ausstattung.length)
+        ? `<div class="ausstattung-wolke">
+             ${m.ausstattung.map((a) => `<span class="aus-chip">${esc(a)}</span>`).join('')}
+           </div>`
+        : '<p class="mini-hinweis">Keine Ausstattung erfasst.</p>'}
+    </section>
+
+    <section class="ansicht-block">
+      <h3>Fotos ${ctx.daten.fotos.length ? `(${ctx.daten.fotos.length})` : ''}</h3>
+      ${ctx.daten.fotos.length
+        ? `<div class="foto-galerie">${ctx.daten.fotos.map((f) => fotoHtml(f, false)).join('')}</div>`
+        : '<p class="mini-hinweis">Keine Fotos vorhanden.</p>'}
+    </section>
+
+    <p class="mini-hinweis ansicht-fuss">
+      Diese Ansicht dient nur zum Lesen. Zum Ändern oben rechts auf <b>Bearbeiten</b> klicken.
+    </p>`;
+
+  bindeFotoLightbox(c);
+}
+
+function textBlock(titel, text) {
+  if (!text) return '';
+  return `
+    <section class="ansicht-block">
+      <h3>${esc(titel)}</h3>
+      <p class="freitext">${esc(text)}</p>
+    </section>`;
+}
+
+/**
+ * Zeigt an, mit welchen Faktoren die gewählte Kategorie rechnet.
+ * Ohne diesen Hinweis wäre unerklärlich, warum dieselbe Maschine unter
+ * "Heuernte" plötzlich weniger wert ist als unter "Traktoren".
+ */
+function zeigeKategorieHinweis(c) {
+  const ziel = $('#kat-hinweis', c);
+  if (!ziel) return;
+
+  const k = aktuelleKategorie();
+  if (!k) {
+    ziel.textContent = 'Ohne Kategorie gelten die allgemeinen Wertverlust-Faktoren.';
+    return;
+  }
+
+  const eigene = [
+    k.wertverlust_jahr_prozent != null ? `${k.wertverlust_jahr_prozent} % pro Jahr` : null,
+    k.wertverlust_pro_100h_prozent != null ? `${k.wertverlust_pro_100h_prozent} % je 100 h` : null,
+    k.mindest_restwert_prozent != null ? `Mindestrestwert ${k.mindest_restwert_prozent} %` : null,
+  ].filter(Boolean);
+
+  ziel.textContent = eigene.length
+    ? `„${k.name}" rechnet mit eigenen Faktoren: ${eigene.join(' · ')}.`
+    : `„${k.name}" verwendet die allgemeinen Wertverlust-Faktoren.`;
+}
+
 function stammdatenAusFormular(form) {
   const g = (n) => form.elements[n]?.value ?? '';
   return {
+    kategorie_id: leerZuNull(g('kategorie_id')),
     hersteller: leerZuNull(g('hersteller')), marke: leerZuNull(g('marke')),
     modell: leerZuNull(g('modell')), typ: leerZuNull(g('typ')),
     seriennummer: leerZuNull(g('seriennummer')),
@@ -324,6 +550,7 @@ async function speichereStammdaten(form) {
   const daten = { ...stammdatenAusFormular(form), ...bewertungsFelder() };
 
   try {
+    await merkeNeueMarke(daten.hersteller);
     if (ctx.neu) {
       daten.created_by = ctx.state.user.id;
       const { data, error } = await supabase.from('machines').insert(daten).select().single();
@@ -334,6 +561,8 @@ async function speichereStammdaten(form) {
       await ladePendingFotos(data.id);
       await ladeDetails();          // Baugruppen wurden per Trigger angelegt
       ctx.onGespeichert?.();
+      // Frisch angelegt -> gleich in die Nur-Lese-Ansicht wechseln
+      ctx.modus = 'ansicht';
       zeichne();
       return;
     }
@@ -355,18 +584,37 @@ async function speichereStammdaten(form) {
 
     ctx.machine = data[0];
     ctx.entwurf = {};
-    ok.textContent = 'Gespeichert';
-    setTimeout(() => (ok.textContent = ''), 2000);
     ctx.onGespeichert?.();
+    // Nach dem Speichern zurück in die Nur-Lese-Ansicht – die Bearbeitung
+    // soll nicht dauerhaft aktiv bleiben.
+    ctx.modus = 'ansicht';
     zeichne();
   } catch (err) {
     fehler.textContent = 'Speichern fehlgeschlagen: ' + (err.message || err);
   }
 }
 
+/**
+ * Nimmt eine neu eingetippte Marke in die Liste auf, damit sie beim nächsten
+ * Mal vorgeschlagen wird. Fehler hier dürfen das Speichern nicht verhindern –
+ * die Marke steht ja ohnehin schon in der Maschine.
+ */
+async function merkeNeueMarke(hersteller) {
+  if (!hersteller) return;
+  const vorhanden = (ctx.state.marken ?? [])
+    .some((m) => m.name.toLowerCase() === hersteller.toLowerCase());
+  if (vorhanden) return;
+
+  const { data, error } = await supabase.from('marken')
+    .insert({ name: hersteller }).select().single();
+  if (error) return;                    // z. B. gleichzeitig von jemand anderem angelegt
+  ctx.state.marken.push(data);
+  ctx.state.marken.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+}
+
 /** Berechnete Bewertungsfelder, die mit in die Datenbank geschrieben werden. */
 function bewertungsFelder() {
-  const r = bewerteMaschine(aktuelleMaschine(), ctx.daten, ctx.state.settings);
+  const r = bewerteMaschine(aktuelleMaschine(), bewertungsKontext(), ctx.state.settings);
   return {
     zustand_technisch: r.technisch, zustand_optisch: r.optisch,
     zustandsindex: r.index, reparaturkosten: r.reparaturkosten,
@@ -457,6 +705,19 @@ function zeichneAusstattung(c) {
   const zuschlaege = mitStandardwerten(ctx.state.settings).ausstattung_zuschlaege;
   const gewaehlt = Array.isArray(m.ausstattung) ? m.ausstattung : [];
 
+  if (!bearbeitbar()) {
+    const summe = gewaehlt.reduce((s, n) => s + (Number(zuschlaege[n]) || 0), 0);
+    c.innerHTML = gewaehlt.length
+      ? `<div class="ausstattung-liste">
+           ${gewaehlt.map((n) => `
+             <div class="aus-zeile"><span>${esc(n)}</span>
+               <b>${zuschlaege[n] != null ? '+ ' + formatPreis(zuschlaege[n], 'CHF') : '–'}</b></div>`).join('')}
+         </div>
+         <p class="aus-summe">Summe der Zuschläge: <b>${formatPreis(summe, 'CHF')}</b></p>`
+      : '<p class="leer">Keine Ausstattung erfasst.</p>';
+    return;
+  }
+
   c.innerHTML = `
     <p class="mini-hinweis">Die Liste und die Zuschläge pflegt der Administrator unter „Einstellungen".</p>
     <div class="checkgrid">
@@ -503,6 +764,26 @@ async function speichereFelder(felder) {
 // BAUGRUPPEN – technische Bewertung
 // ----------------------------------------------------------------------------
 function zeichneBaugruppen(c) {
+  if (!bearbeitbar()) {
+    c.innerHTML = `
+      <table class="tabelle">
+        <thead><tr><th></th><th>Baugruppe</th><th>Note</th><th>Bemerkungen</th><th>Schäden</th><th class="zahl">Reparatur</th></tr></thead>
+        <tbody>
+          ${ctx.daten.baugruppen.map((b) => `
+            <tr>
+              <td><span class="ampel ${b.note >= 8 ? 'gruen' : b.note >= 5 ? 'gelb' : 'rot'}"></span></td>
+              <td><b>${esc(b.name)}</b></td>
+              <td class="note-zelle">${b.note ?? '–'}/10</td>
+              <td>${esc(b.bemerkungen || '–')}</td>
+              <td>${esc(b.schaeden || '–')}</td>
+              <td class="zahl">${b.reparaturbedarf
+                ? `<b class="warn-text">${formatPreis(b.reparaturkosten ?? 0, 'CHF')}</b>` : '–'}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+    return;
+  }
+
   c.innerHTML = `
     <p class="mini-hinweis">Note 1 = unbrauchbar, 10 = neuwertig. Die Noten ergeben
       technischen und optischen Zustand sowie den Zustandsindex.
@@ -591,6 +872,29 @@ async function speichereBaugruppe(bg) {
 // REIFEN
 // ----------------------------------------------------------------------------
 function zeichneReifen(c) {
+  if (!bearbeitbar()) {
+    c.innerHTML = ctx.daten.reifen.length === 0
+      ? '<p class="leer">Keine Reifen erfasst.</p>'
+      : `<table class="tabelle">
+          <thead><tr><th>Position</th><th>Hersteller</th><th>Dimension</th><th>Profil</th>
+            <th>Verschleiss</th><th>Alter</th><th>Zustand</th><th>Schäden</th></tr></thead>
+          <tbody>
+            ${ctx.daten.reifen.map((r) => `
+              <tr>
+                <td><b>${esc(r.position)}</b></td>
+                <td>${esc(r.hersteller || '–')}</td>
+                <td>${esc(r.dimension || '–')}</td>
+                <td>${esc(r.profil || '–')}</td>
+                <td>${r.verschleiss != null ? r.verschleiss + ' %' : '–'}</td>
+                <td>${r.alter_jahre != null ? r.alter_jahre + ' J.' : '–'}</td>
+                <td>${r.zustand != null ? r.zustand + '/10' : '–'}</td>
+                <td>${esc(r.schaeden || '–')}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+    return;
+  }
+
   c.innerHTML = `
     <div class="listen-aktion">
       <select id="reifen-pos">
@@ -673,6 +977,29 @@ function reifenHtml(r) {
 // SCHÄDEN
 // ----------------------------------------------------------------------------
 function zeichneSchaeden(c) {
+  if (!bearbeitbar()) {
+    const summe = ctx.daten.schaeden.reduce((s, x) => s + (Number(x.kostenschaetzung) || 0), 0);
+    c.innerHTML = ctx.daten.schaeden.length === 0
+      ? '<p class="leer">Keine Schäden erfasst.</p>'
+      : `<div class="karten-liste">
+          ${ctx.daten.schaeden.map((s) => `
+            <div class="karte-block schaden-karte prio-${esc(s.prioritaet)}">
+              <div class="block-kopf">
+                <strong>${esc(s.titel)}</strong>
+                <span class="prio-tag prio-${esc(s.prioritaet)}">Priorität ${esc(s.prioritaet)}</span>
+              </div>
+              <dl class="datenliste">
+                ${s.beschreibung ? `<div><dt>Beschreibung</dt><dd>${esc(s.beschreibung)}</dd></div>` : ''}
+                ${s.ursache ? `<div><dt>Ursache</dt><dd>${esc(s.ursache)}</dd></div>` : ''}
+                ${s.reparaturempfehlung ? `<div><dt>Empfehlung</dt><dd>${esc(s.reparaturempfehlung)}</dd></div>` : ''}
+                <div><dt>Kostenschätzung</dt><dd><b>${formatPreis(s.kostenschaetzung ?? 0, 'CHF')}</b></dd></div>
+              </dl>
+            </div>`).join('')}
+        </div>
+        <p class="aus-summe">Summe der Kostenschätzungen: <b>${formatPreis(summe, 'CHF')}</b></p>`;
+    return;
+  }
+
   c.innerHTML = `
     <form id="schaden-form" class="listen-aktion">
       <input type="text" id="schaden-titel" placeholder="Neuer Schaden (kurze Bezeichnung)" required>
@@ -756,6 +1083,15 @@ function zeichneFotos(c) {
   //   - ohne capture              -> öffnet die Fotomediathek / Dateien
   // Ein einzelnes Feld MIT capture würde die Mediathek auf dem Handy komplett
   // verstecken – man könnte dann nur noch live fotografieren.
+  // Nur ansehen: Galerie ohne Hochlade-Bereich
+  if (!bearbeitbar()) {
+    c.innerHTML = ctx.daten.fotos.length
+      ? `<div class="foto-galerie">${ctx.daten.fotos.map((f) => fotoHtml(f, false)).join('')}</div>`
+      : '<p class="leer">Keine Fotos vorhanden.</p>';
+    bindeFotoLightbox(c);
+    return;
+  }
+
   c.innerHTML = `
     <div class="foto-upload">
       <label>Kategorie
@@ -763,8 +1099,8 @@ function zeichneFotos(c) {
       </label>
 
       <div class="foto-knoepfe">
-        <button type="button" class="btn-primary" id="foto-kamera-btn">📷 Foto aufnehmen</button>
-        <button type="button" class="btn-sekundaer" id="foto-galerie-btn">🖼️ Aus Fotos wählen</button>
+        <button type="button" class="btn-primary" id="foto-kamera-btn">${ICON_KAMERA}<span>Foto aufnehmen</span></button>
+        <button type="button" class="btn-sekundaer" id="foto-galerie-btn">${ICON_BILDER}<span>Aus Fotos wählen</span></button>
       </div>
 
       <input type="file" id="foto-kamera" accept="image/*" capture="environment" hidden>
@@ -772,9 +1108,7 @@ function zeichneFotos(c) {
     </div>
     <p class="mini-hinweis" id="foto-status">Fotos werden vor dem Hochladen automatisch verkleinert.
       Mehrere Bilder auf einmal auswählen ist möglich.</p>
-    <div class="foto-galerie" id="foto-galerie">
-      ${ctx.neu ? '' : ctx.daten.fotos.map(fotoHtml).join('')}
-    </div>`;
+    <div class="foto-galerie" id="foto-galerie">${galerieInhalt()}</div>`;
 
   $('#foto-kamera-btn', c).addEventListener('click', () => $('#foto-kamera', c).click());
   $('#foto-galerie-btn', c).addEventListener('click', () => $('#foto-datei', c).click());
@@ -786,7 +1120,34 @@ function zeichneFotos(c) {
     })
   );
 
-  $$('.foto-x', c).forEach((b) =>
+  bindeGalerieAktionen(c);
+}
+
+/**
+ * Inhalt der Galerie: bereits hochgeladene Fotos UND die einer noch nicht
+ * gespeicherten Maschine, die nur vorgemerkt sind. Letztere haben noch keine
+ * Adresse im Speicher – wir zeigen sie direkt aus der gewählten Datei an.
+ */
+function galerieInhalt() {
+  const gespeichert = ctx.daten.fotos.map((f) => fotoHtml(f, true)).join('');
+  const vorgemerkt = ctx.pendingFotos.map((p, i) => `
+    <figure class="foto vorgemerkt">
+      <img src="${p.vorschauUrl}" alt="${esc(p.kategorie)}"
+           data-gross="${p.vorschauUrl}" data-titel="${esc(p.kategorie)}">
+      <figcaption>${esc(p.kategorie)}</figcaption>
+      <span class="foto-marke">wird beim Anlegen hochgeladen</span>
+      <button type="button" class="foto-x" data-pending="${i}">×</button>
+    </figure>`).join('');
+
+  const alles = gespeichert + vorgemerkt;
+  return alles || '<p class="mini-hinweis">Noch keine Fotos.</p>';
+}
+
+function bindeGalerieAktionen(c) {
+  bindeFotoLightbox(c);
+
+  // Hochgeladenes Foto löschen
+  $$('.foto-x[data-foto]', c).forEach((b) =>
     b.addEventListener('click', async () => {
       if (!confirm('Foto endgültig löschen?')) return;
       const foto = ctx.daten.fotos.find((f) => f.id === b.dataset.foto);
@@ -799,15 +1160,52 @@ function zeichneFotos(c) {
       }
     })
   );
+
+  // Vorgemerktes Foto wieder entfernen
+  $$('.foto-x[data-pending]', c).forEach((b) =>
+    b.addEventListener('click', () => {
+      const i = Number(b.dataset.pending);
+      URL.revokeObjectURL(ctx.pendingFotos[i].vorschauUrl);   // Speicher freigeben
+      ctx.pendingFotos.splice(i, 1);
+      zeichne();
+    })
+  );
 }
 
-function fotoHtml(f) {
+/**
+ * Ein Foto in der Galerie.
+ * @param {object} f            Zeile aus machine_photos
+ * @param {boolean} mitLoeschen Löschknopf anzeigen (nur im Bearbeitungsmodus)
+ */
+function fotoHtml(f, mitLoeschen = true) {
+  const url = fotoUrl(f.storage_path);
   return `
     <figure class="foto">
-      <img src="${fotoUrl(f.storage_path)}" alt="${esc(f.kategorie)}" loading="lazy">
+      <img src="${url}" alt="${esc(f.kategorie)}" loading="lazy"
+           data-gross="${url}" data-titel="${esc(f.kategorie)}">
       <figcaption>${esc(f.kategorie)}</figcaption>
-      <button type="button" class="foto-x" data-foto="${f.id}">×</button>
+      ${mitLoeschen ? `<button type="button" class="foto-x" data-foto="${f.id}">×</button>` : ''}
     </figure>`;
+}
+
+/** Klick auf ein Foto zeigt es gross – sonst erkennt man auf 90 px nichts. */
+function bindeFotoLightbox(wurzel) {
+  $$('.foto img[data-gross]', wurzel).forEach((img) =>
+    img.addEventListener('click', () => {
+      const box = document.createElement('div');
+      box.className = 'lightbox';
+      box.innerHTML = `
+        <button type="button" class="lightbox-x" aria-label="Schliessen">×</button>
+        <img src="${img.dataset.gross}" alt="${esc(img.dataset.titel || '')}">
+        <span class="lightbox-titel">${esc(img.dataset.titel || '')}</span>`;
+      const zu = () => box.remove();
+      box.addEventListener('click', (e) => { if (e.target !== box.querySelector('img')) zu(); });
+      document.addEventListener('keydown', function esc2(e) {
+        if (e.key === 'Escape') { zu(); document.removeEventListener('keydown', esc2); }
+      });
+      document.body.appendChild(box);
+    })
+  );
 }
 
 async function handleFotos(fileList, c) {
@@ -816,20 +1214,26 @@ async function handleFotos(fileList, c) {
   const kategorie = $('#foto-kategorie', c).value;
   const status = $('#foto-status', c);
 
+  // Neue Maschine: es gibt noch keine ID, an der ein Foto hängen könnte.
+  // Wir merken die Datei vor und zeigen sie SOFORT als Vorschau an.
   if (ctx.neu) {
-    dateien.forEach((d) => ctx.pendingFotos.push({ datei: d, kategorie }));
-    status.textContent = `${ctx.pendingFotos.length} Foto(s) vorgemerkt – werden beim Anlegen hochgeladen.`;
+    dateien.forEach((datei) => ctx.pendingFotos.push({
+      datei, kategorie,
+      vorschauUrl: URL.createObjectURL(datei),
+    }));
+    zeichne();
     return;
   }
 
-  status.textContent = 'Lade hoch …';
+  status.textContent = `Lade ${dateien.length} Foto(s) hoch …`;
   try {
     for (const datei of dateien) {
       const pfad = await ladeFotoHoch(datei, ctx.machine.id, ctx.state.user.id);
-      const { data } = await supabase.from('machine_photos').insert({
+      const { data, error } = await supabase.from('machine_photos').insert({
         machine_id: ctx.machine.id, storage_path: pfad, kategorie,
         created_by: ctx.state.user.id,
       }).select().single();
+      if (error) throw error;
       if (data) ctx.daten.fotos.push(data);
     }
     zeichne();
@@ -839,11 +1243,12 @@ async function handleFotos(fileList, c) {
 }
 
 async function ladePendingFotos(machineId) {
-  for (const { datei, kategorie } of ctx.pendingFotos) {
+  for (const { datei, kategorie, vorschauUrl } of ctx.pendingFotos) {
     const pfad = await ladeFotoHoch(datei, machineId, ctx.state.user.id);
     await supabase.from('machine_photos').insert({
       machine_id: machineId, storage_path: pfad, kategorie, created_by: ctx.state.user.id,
     });
+    URL.revokeObjectURL(vorschauUrl);   // Vorschau wird nicht mehr gebraucht
   }
   ctx.pendingFotos = [];
 }
@@ -1063,6 +1468,38 @@ function vergleichHtml(v) {
       </div>
       <label>Ausstattung <input type="text" data-feld="ausstattung" value="${esc(v.ausstattung || '')}"></label>
     </div>`;
+}
+
+// ----------------------------------------------------------------------------
+// EXCEL-EXPORT
+// ----------------------------------------------------------------------------
+async function excelExportieren() {
+  const knopf = $('#excel-btn', ctx.host);
+  const urText = knopf.innerHTML;
+  const melde = (text) => {
+    knopf.innerHTML = text ? `<span>${esc(text)}</span>` : urText;
+  };
+
+  knopf.disabled = true;
+  try {
+    // Bibliothek erst jetzt laden – sie ist gross und wird selten gebraucht.
+    const { exportiereMaschine } = await import('./excel.js');
+    await exportiereMaschine(
+      aktuelleMaschine(),
+      ctx.daten,
+      {
+        settings: ctx.state.settings,
+        kategorie: aktuelleKategorie(),
+        benutzerName,
+      },
+      melde
+    );
+  } catch (err) {
+    alert('Excel-Export fehlgeschlagen: ' + (err.message || err));
+  } finally {
+    knopf.disabled = false;
+    knopf.innerHTML = urText;
+  }
 }
 
 // ----------------------------------------------------------------------------

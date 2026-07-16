@@ -96,13 +96,16 @@ export function ampelFuerNote(note) {
  * Vollständige Bewertung einer Maschine.
  *
  * @param {object} maschine   Stammdaten inkl. ausstattung[]
- * @param {object} kontext    { baugruppen[], reifen[], schaeden[] }
+ * @param {object} kontext    { baugruppen[], reifen[], schaeden[], kategorie }
+ *                            kategorie: Zeile aus kategorien – ihre Faktoren
+ *                            übersteuern die globalen Einstellungen.
  * @param {object} settings   Faktoren aus der Tabelle settings
  * @param {number} [jahr]     Bezugsjahr (Standard: aktuelles Jahr)
  * @returns {object} vollständiges Ergebnis inkl. Rechenschritten
  */
 export function bewerteMaschine(maschine, kontext = {}, settings = {}, jahr = aktuellesJahr()) {
-  const s = mitStandardwerten(settings);
+  // Kategorie-Faktoren übersteuern die globalen (z. B. Heuernte statt Traktor)
+  const s = mitKategorie(settings, kontext.kategorie);
   const baugruppen = kontext.baugruppen ?? [];
   const reifen = kontext.reifen ?? [];
   const schaeden = kontext.schaeden ?? [];
@@ -294,6 +297,31 @@ export function vergleichbarkeit(eigene, vergleich) {
 // ============================================================================
 // Hilfsfunktionen
 // ============================================================================
+
+/**
+ * Legt die Faktoren einer Kategorie über die globalen Einstellungen.
+ *
+ * Hintergrund: Ein Heuwender verliert anders an Wert als ein Traktor. Darum
+ * darf jede Kategorie eigene Wertverlust-Faktoren haben. Felder, die bei der
+ * Kategorie leer (null) sind, behalten den globalen Wert – so muss der Admin
+ * nur pflegen, was wirklich abweicht.
+ *
+ * @param {object} settings   globale Einstellungen
+ * @param {object} kategorie  Zeile aus kategorien (oder null)
+ */
+export function mitKategorie(settings, kategorie) {
+  const s = mitStandardwerten(settings);
+  if (!kategorie) return s;
+
+  for (const feld of ['wertverlust_jahr_prozent', 'wertverlust_pro_100h_prozent',
+                      'mindest_restwert_prozent']) {
+    const wert = kategorie[feld];
+    if (wert !== null && wert !== undefined && wert !== '') {
+      s[feld] = zahl(wert, s[feld]);
+    }
+  }
+  return s;
+}
 
 /** Ergänzt fehlende Einstellungen mit sinnvollen Standardwerten. */
 export function mitStandardwerten(settings = {}) {

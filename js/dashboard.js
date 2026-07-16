@@ -41,6 +41,9 @@ export async function renderDashboard(c, state) {
   const indizes = m.filter((x) => x.zustandsindex != null).map((x) => x.zustandsindex);
 
   // --- Verteilungen ----------------------------------------------------------
+  const kategorieName = (x) =>
+    (state.kategorien ?? []).find((k) => k.id === x.kategorie_id)?.name || 'ohne Kategorie';
+  const kategorien = gruppiere(m, kategorieName);
   const marken = gruppiere(m, (x) => x.hersteller || x.marke || 'ohne Angabe');
   const standorte = gruppiere(m, (x) => x.standort || 'ohne Angabe');
   const ampeln = {
@@ -77,6 +80,11 @@ export async function renderDashboard(c, state) {
       <div class="dash-block">
         <h3>Zustand des Bestands</h3>
         ${balkenAmpel(ampeln, m.length)}
+      </div>
+
+      <div class="dash-block">
+        <h3>Kategorien</h3>
+        ${balken(kategorien, m.length, w, preis)}
       </div>
 
       <div class="dash-block">

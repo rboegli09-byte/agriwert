@@ -61,15 +61,16 @@ body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
-  font-size: 15px;
-  line-height: 1.45;
+  font-size: 17px;          /* grössere Grundschrift für bessere Lesbarkeit */
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
 .lade { padding: 4rem; text-align: center; color: var(--text-schwach); }
 
-h1, h2 { font-weight: 600; letter-spacing: -0.01em; }
-h2 { font-size: 1.15rem; }
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
+h2 { font-size: 1.4rem; }
+h3 { font-size: 1.05rem; }
 
 /* --- Buttons --------------------------------------------------------------- */
 button { font: inherit; cursor: pointer; border: none; border-radius: var(--radius); }
@@ -117,9 +118,9 @@ button { font: inherit; cursor: pointer; border: none; border-radius: var(--radi
 .mini-hinweis { color: var(--text-schwach); font-size: 0.8rem; margin-top: 1rem; }
 
 /* --- Formularfelder -------------------------------------------------------- */
-label { display: block; margin-bottom: 0.85rem; font-size: 0.82rem; color: var(--text-schwach); }
+label { display: block; margin-bottom: 0.9rem; font-size: 0.92rem; color: var(--text-schwach); }
 input, select, textarea {
-  width: 100%; margin-top: 0.25rem; padding: 0.55rem 0.65rem; font-size: 0.95rem;
+  width: 100%; margin-top: 0.3rem; padding: 0.6rem 0.7rem; font-size: 1rem;
   border: 1px solid var(--rahmen-stark); border-radius: var(--radius);
   background: var(--feld); color: var(--text);
 }
@@ -481,6 +482,104 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
 .ampel-legende span { display: flex; align-items: center; gap: 0.35rem; }
 .ampel-legende b { color: var(--text); }
 
+/* --- Kategorien-Verwaltung ------------------------------------------------- */
+.kat-kopf, .kat-zeile {
+  display: grid; grid-template-columns: 1fr 90px 90px 110px 34px;
+  gap: 0.4rem; align-items: center;
+}
+.kat-kopf {
+  font-size: 0.7rem; color: var(--text-schwach); text-transform: uppercase;
+  letter-spacing: 0.04em; margin-bottom: 0.35rem;
+}
+.kat-zeile { margin-bottom: 0.4rem; }
+.kat-zeile input { margin: 0; }
+.kat-zeile input::placeholder { font-style: italic; opacity: 0.6; }
+
+/* Marken als Chips */
+.marken-wolke { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.marke-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  background: var(--bg); border: 1px solid var(--rahmen-stark);
+  border-radius: 999px; padding: 0.2rem 0.3rem 0.2rem 0.7rem; font-size: 0.82rem;
+}
+.marke-chip button {
+  background: none; color: var(--text-schwach); border: none;
+  width: 18px; height: 18px; border-radius: 50%; line-height: 1; font-size: 0.9rem;
+}
+.marke-chip button:hover { background: var(--schlecht); color: #fff; }
+
+/* Kategorie-Kennzeichnung auf der Listenkarte */
+.kat-tag {
+  background: var(--akzent-schwach); color: var(--akzent);
+  border-radius: 3px; padding: 0 0.35rem; font-weight: 500;
+}
+.karte-daten .kat-tag::after { content: none !important; }
+
+/* --- Detailansicht: Werkzeuge oben rechts ---------------------------------- */
+.detail-titel { flex: 1; min-width: 220px; }
+.detail-werkzeuge { display: flex; gap: 0.5rem; align-items: flex-start; }
+.detail-werkzeuge button { display: inline-flex; align-items: center; gap: 0.45rem; }
+.icon { width: 18px; height: 18px; flex-shrink: 0; }
+
+.modus-band {
+  background: var(--akzent-schwach); color: var(--akzent);
+  border-left: 3px solid var(--akzent); border-radius: var(--radius);
+  padding: 0.5rem 0.9rem; margin-bottom: 0.8rem; font-size: 0.9rem; font-weight: 500;
+}
+
+/* --- Nur-Lese-Ansicht ------------------------------------------------------ */
+.ansicht-block { margin-bottom: 1.6rem; }
+.ansicht-block h3 {
+  margin: 0 0 0.6rem; font-size: 0.82rem; color: var(--text-schwach);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--rahmen); padding-bottom: 0.35rem;
+}
+.datenliste { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 1.5rem; }
+.datenliste > div { display: flex; justify-content: space-between; gap: 1rem; padding: 0.45rem 0; border-bottom: 1px dashed var(--rahmen); }
+.datenliste dt { color: var(--text-schwach); font-size: 0.95rem; }
+.datenliste dd { margin: 0; font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+.freitext { margin: 0; white-space: pre-wrap; line-height: 1.6; }
+.ansicht-fuss { border-top: 1px solid var(--rahmen); padding-top: 0.8rem; }
+
+.ausstattung-wolke { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.aus-chip {
+  background: var(--akzent-schwach); color: var(--akzent);
+  border-radius: 999px; padding: 0.25rem 0.75rem; font-size: 0.9rem; font-weight: 500;
+}
+.ausstattung-liste { display: grid; gap: 0; }
+.aus-zeile { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--rahmen); }
+.aus-summe { text-align: right; margin-top: 0.8rem; font-size: 1rem; }
+.note-zelle { font-variant-numeric: tabular-nums; font-weight: 600; }
+.warn-text { color: var(--mittel); }
+.prio-tag { font-size: 0.78rem; padding: 0.1rem 0.5rem; border-radius: 3px; background: var(--bg); }
+.prio-tag.prio-hoch { background: var(--schlecht); color: #fff; }
+.prio-tag.prio-mittel { background: var(--mittel); color: #fff; }
+
+/* --- Foto-Vorschau vor dem Speichern --------------------------------------- */
+.foto.vorgemerkt img { outline: 2px dashed var(--akzent); outline-offset: -2px; }
+.foto-marke {
+  position: absolute; left: 0; right: 0; bottom: 22px;
+  background: rgba(43, 106, 75, 0.9); color: #fff;
+  font-size: 0.62rem; text-align: center; padding: 0.1rem;
+}
+.foto img { cursor: zoom-in; }
+
+/* --- Bild gross anzeigen --------------------------------------------------- */
+.lightbox {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex; align-items: center; justify-content: center; flex-direction: column;
+  gap: 0.8rem; padding: 1.5rem; cursor: zoom-out;
+}
+.lightbox img { max-width: 100%; max-height: 85vh; object-fit: contain; border-radius: var(--radius); cursor: default; }
+.lightbox-titel { color: #fff; font-size: 0.9rem; }
+.lightbox-x {
+  position: absolute; top: 1rem; right: 1rem;
+  background: rgba(255, 255, 255, 0.15); color: #fff;
+  width: 40px; height: 40px; border-radius: 50%; font-size: 1.4rem; line-height: 1;
+}
+.lightbox-x:hover { background: rgba(255, 255, 255, 0.3); }
+
 /* --- Hinweisboxen ---------------------------------------------------------- */
 .hinweis-box {
   max-width: 560px; margin: 4rem auto; background: var(--karte);
@@ -520,6 +619,17 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
   .dash-raster { grid-template-columns: 1fr; }
   .balken-zeile { grid-template-columns: 80px 1fr; }
   .balken-wert { grid-column: 2; }
+
+  /* Kategorien-Verwaltung: Kopfzeile weg, Zeilen untereinander */
+  .kat-kopf { display: none; }
+  .kat-zeile {
+    grid-template-columns: 1fr 34px;
+    border: 1px solid var(--rahmen); border-radius: var(--radius);
+    padding: 0.6rem; margin-bottom: 0.6rem;
+  }
+  .kat-zeile input[data-feld="name"] { grid-column: 1; }
+  .kat-zeile .kat-x { grid-column: 2; grid-row: 1; }
+  .kat-zeile input:not([data-feld="name"]) { grid-column: 1 / -1; }
 
   /* Fotos: unterwegs grosse Klickflächen, Knöpfe über die volle Breite */
   .foto-upload { align-items: stretch; }
