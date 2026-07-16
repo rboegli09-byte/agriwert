@@ -1,0 +1,33 @@
+{
+  "name": "AgriWert – Bewertung von Landmaschinen",
+  "short_name": "AgriWert",
+  "description": "Professionelle Bewertung, Dokumentation und Preisermittlung von gebrauchten Landmaschinen.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f2f3f4",
+  "theme_color": "#2b6a4b",
+  "lang": "de-CH",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

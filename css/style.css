@@ -1,0 +1,462 @@
+/* ============================================================================
+   AgriWert – Styles
+   ----------------------------------------------------------------------------
+   Sachliche Werkzeug-Optik: gedeckte Graustufen als Grundlage, ein einziger
+   zurückhaltender Akzent. Farbe wird nur dort eingesetzt, wo sie eine
+   Bedeutung hat (Ampel, Preis, aktiver Reiter) – nicht zur Dekoration.
+   Kontraststark und mit grossen Klickflächen für den Einsatz im Freien.
+   Hell- und Dunkelmodus automatisch.
+   ========================================================================== */
+
+:root {
+  /* Akzent – gedecktes Tannengrün, nicht Signalgrün */
+  --akzent: #2b6a4b;
+  --akzent-hover: #235840;
+  --akzent-schwach: #e8f0eb;
+
+  /* Statusfarben (nur funktional) */
+  --gut: #2b6a4b;
+  --mittel: #a8741a;
+  --schlecht: #a83232;
+
+  /* Flächen & Text */
+  --bg: #f2f3f4;
+  --karte: #ffffff;
+  --feld: #ffffff;
+  --text: #16191c;
+  --text-schwach: #616b73;
+  --rahmen: #d8dcdf;
+  --rahmen-stark: #b9c0c5;
+
+  --schatten: 0 1px 2px rgba(16, 20, 24, 0.06), 0 1px 3px rgba(16, 20, 24, 0.04);
+  --radius: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --akzent: #4e9c74;
+    --akzent-hover: #5cae83;
+    --akzent-schwach: #1c2c24;
+
+    --gut: #4e9c74;
+    --mittel: #c9922f;
+    --schlecht: #cf5f5f;
+
+    --bg: #101315;
+    --karte: #181c1f;
+    --feld: #1e2327;
+    --text: #e6e9eb;
+    --text-schwach: #8d979e;
+    --rahmen: #2b3237;
+    --rahmen-stark: #3c454b;
+
+    --schatten: none;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+.lade { padding: 4rem; text-align: center; color: var(--text-schwach); }
+
+h1, h2 { font-weight: 600; letter-spacing: -0.01em; }
+h2 { font-size: 1.15rem; }
+
+/* --- Buttons --------------------------------------------------------------- */
+button { font: inherit; cursor: pointer; border: none; border-radius: var(--radius); }
+
+.btn-primary {
+  background: var(--akzent); color: #fff; padding: 0.6rem 1.2rem; font-weight: 500;
+}
+.btn-primary:hover { background: var(--akzent-hover); }
+.btn-gross { width: 100%; padding: 0.75rem; font-size: 1rem; }
+
+.btn-sekundaer {
+  background: var(--feld); color: var(--text); padding: 0.5rem 0.9rem;
+  border: 1px solid var(--rahmen-stark);
+}
+.btn-sekundaer:hover { border-color: var(--text-schwach); }
+
+.btn-klein { background: transparent; color: var(--text-schwach); padding: 0.4rem 0.7rem; }
+.btn-klein:hover { color: var(--text); }
+
+/* Textlink, der technisch ein Button ist */
+.link {
+  background: none; border: none; padding: 0; font: inherit;
+  color: var(--akzent); text-decoration: underline; cursor: pointer;
+}
+.link:hover { color: var(--akzent-hover); }
+
+.btn-danger {
+  background: transparent; color: var(--schlecht); padding: 0.6rem 1rem;
+  border: 1px solid var(--schlecht);
+}
+.btn-danger:hover { background: var(--schlecht); color: #fff; }
+
+/* --- Login ----------------------------------------------------------------- */
+.login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
+.login-card {
+  background: var(--karte); padding: 2.5rem 2rem; border-radius: var(--radius);
+  border: 1px solid var(--rahmen); box-shadow: var(--schatten);
+  width: 100%; max-width: 360px; text-align: center;
+}
+.login-card .logo { color: var(--akzent); }
+.login-card .logo svg { width: 34px; height: 34px; }
+.login-card h1 { margin: 0.5rem 0 0; font-size: 1.5rem; }
+.untertitel { color: var(--text-schwach); margin-top: 0.15rem; font-size: 0.9rem; }
+.login-card form { text-align: left; margin-top: 1.75rem; }
+.mini-hinweis { color: var(--text-schwach); font-size: 0.8rem; margin-top: 1rem; }
+
+/* --- Formularfelder -------------------------------------------------------- */
+label { display: block; margin-bottom: 0.85rem; font-size: 0.82rem; color: var(--text-schwach); }
+input, select, textarea {
+  width: 100%; margin-top: 0.25rem; padding: 0.55rem 0.65rem; font-size: 0.95rem;
+  border: 1px solid var(--rahmen-stark); border-radius: var(--radius);
+  background: var(--feld); color: var(--text);
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--akzent); outline-offset: -1px; border-color: var(--akzent);
+}
+textarea { resize: vertical; }
+.fehler { color: var(--schlecht); font-size: 0.85rem; margin-top: 0.5rem; }
+.ok { color: var(--akzent); font-weight: 500; font-size: 0.85rem; }
+
+/* --- Topbar / Navigation --------------------------------------------------- */
+.topbar {
+  display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;
+  background: var(--karte); padding: 0.6rem 1.2rem;
+  border-bottom: 1px solid var(--rahmen);
+  position: sticky; top: 0; z-index: 10;
+}
+.marke { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 1rem; }
+.marke svg { width: 19px; height: 19px; color: var(--akzent); }
+.tabs { display: flex; gap: 0.15rem; flex: 1; flex-wrap: wrap; }
+.tabs button {
+  background: transparent; color: var(--text-schwach); padding: 0.45rem 0.8rem;
+  font-weight: 500; font-size: 0.9rem;
+}
+.tabs button.aktiv { background: var(--akzent-schwach); color: var(--akzent); }
+.tabs button:hover:not(.aktiv) { color: var(--text); }
+.user { display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; color: var(--text-schwach); }
+.user .rolle {
+  border: 1px solid var(--rahmen-stark); padding: 0.05rem 0.4rem;
+  border-radius: 3px; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em;
+}
+
+main { padding: 1.5rem 1.2rem; max-width: 1100px; margin: 0 auto; }
+
+/* --- Filterleiste / Suche -------------------------------------------------- */
+.filterleiste { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.6rem; }
+.filterleiste input, .filterleiste select { margin: 0; }
+.filterleiste #f-text { flex: 1; }
+.filterleiste #f-sort { width: auto; min-width: 160px; }
+
+.filter-erweitert {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0 0.8rem; align-items: end;
+  background: var(--karte); border: 1px solid var(--rahmen);
+  border-radius: var(--radius); padding: 1rem 1rem 0.4rem; margin-bottom: 0.8rem;
+}
+.filter-erweitert button { margin-bottom: 0.85rem; }
+
+.ergebnis-kopf {
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
+  color: var(--text-schwach); font-size: 0.82rem; margin-bottom: 0.7rem;
+}
+.ergebnis-kopf b { color: var(--text); }
+
+/* --- Maschinenliste -------------------------------------------------------- */
+.karten { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 0.7rem; }
+.karte {
+  background: var(--karte); border: 1px solid var(--rahmen); border-radius: var(--radius);
+  padding: 0.9rem 1rem; cursor: pointer; transition: border-color 0.12s;
+}
+.karte:hover { border-color: var(--rahmen-stark); }
+.karte-oben { display: flex; align-items: center; gap: 0.5rem; font-size: 0.98rem; }
+.karte-oben strong { font-weight: 600; }
+.ampel { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ampel.gruen { background: var(--gut); }
+.ampel.gelb { background: var(--mittel); }
+.ampel.rot { background: var(--schlecht); }
+.karte-daten {
+  display: flex; gap: 0.5rem; flex-wrap: wrap; color: var(--text-schwach);
+  font-size: 0.8rem; margin: 0.45rem 0 0.6rem;
+}
+.karte-daten span:not(:last-child)::after { content: ' ·'; }
+.karte-preis {
+  font-size: 1.05rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  padding-top: 0.5rem; border-top: 1px solid var(--rahmen);
+}
+.kein-preis { color: var(--text-schwach); font-weight: 400; font-size: 0.85rem; }
+.leer { text-align: center; color: var(--text-schwach); padding: 3.5rem 1rem; }
+.leer button { display: block; margin: 1rem auto 0; }
+
+/* --- Formular -------------------------------------------------------------- */
+.formular {
+  background: var(--karte); border: 1px solid var(--rahmen);
+  border-radius: var(--radius); padding: 1.5rem;
+}
+.formular h2 { margin: 0 0 1.2rem; }
+fieldset {
+  border: none; border-top: 1px solid var(--rahmen);
+  margin: 0 0 1.4rem; padding: 1rem 0 0;
+}
+legend {
+  padding: 0; font-weight: 600; font-size: 0.78rem; color: var(--text-schwach);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0 1rem; }
+.checkgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.1rem; }
+.check {
+  display: flex; align-items: center; gap: 0.5rem; margin: 0;
+  padding: 0.4rem 0.5rem; border-radius: var(--radius); cursor: pointer;
+}
+.check:hover { background: var(--bg); }
+.check input { width: auto; margin: 0; accent-color: var(--akzent); }
+.check span { flex: 1; color: var(--text); font-size: 0.9rem; }
+.check em {
+  color: var(--text-schwach); font-size: 0.78rem; font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="range"] { padding: 0; accent-color: var(--akzent); }
+
+/* --- Preisvorschau --------------------------------------------------------- */
+.preis-vorschau {
+  border: 1px solid var(--rahmen); border-left: 3px solid var(--akzent);
+  border-radius: var(--radius); padding: 0.9rem 1.1rem; margin-bottom: 1.4rem;
+}
+.preis-gross {
+  font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.preis-details { margin-top: 0.4rem; }
+.preis-details summary { cursor: pointer; color: var(--text-schwach); font-size: 0.82rem; }
+.preis-details ul { list-style: none; padding: 0; margin: 0.6rem 0 0; }
+.preis-details li {
+  display: flex; justify-content: space-between; gap: 1rem;
+  padding: 0.3rem 0; border-bottom: 1px solid var(--rahmen); font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.preis-details em { color: var(--text-schwach); font-style: normal; }
+.warnung { color: var(--mittel); font-size: 0.85rem; }
+
+.formular-aktionen { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.formular-aktionen .btn-gross { width: auto; min-width: 150px; }
+
+/* --- Fotos ----------------------------------------------------------------- */
+.foto-upload { display: flex; gap: 0.8rem; align-items: flex-end; flex-wrap: wrap; }
+.foto-upload label { margin: 0; }
+.foto-upload select { width: auto; }
+.foto-galerie {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 0.5rem; margin-top: 1rem;
+}
+.foto { position: relative; margin: 0; }
+.foto img {
+  width: 100%; height: 90px; object-fit: cover;
+  border-radius: var(--radius); border: 1px solid var(--rahmen);
+}
+.foto figcaption { font-size: 0.7rem; color: var(--text-schwach); text-align: center; margin-top: 0.15rem; }
+.foto-x {
+  position: absolute; top: 4px; right: 4px; background: rgba(0, 0, 0, 0.65); color: #fff;
+  width: 22px; height: 22px; border-radius: 3px; line-height: 1; font-size: 0.9rem;
+}
+
+/* --- Zuschlag-Editor & Tabelle -------------------------------------------- */
+.zuschlag-zeile {
+  display: grid; grid-template-columns: 1fr 130px 34px; gap: 0.4rem;
+  margin-bottom: 0.4rem; align-items: center;
+}
+.zuschlag-zeile input { margin: 0; }
+.btn-x {
+  background: transparent; color: var(--text-schwach); border: 1px solid var(--rahmen-stark);
+  width: 34px; height: 34px; border-radius: var(--radius);
+}
+.btn-x:hover { color: var(--schlecht); border-color: var(--schlecht); }
+
+.tabelle {
+  width: 100%; border-collapse: collapse; background: var(--karte);
+  border: 1px solid var(--rahmen); border-radius: var(--radius); overflow: hidden;
+}
+.tabelle th, .tabelle td { text-align: left; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--rahmen); }
+.tabelle tr:last-child td { border-bottom: none; }
+.tabelle th {
+  font-size: 0.75rem; color: var(--text-schwach); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.tabelle td small { color: var(--text-schwach); }
+.tabelle select { margin: 0; width: auto; }
+.tabelle select:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* --- Einladen / Konto ------------------------------------------------------ */
+.einladen-zeile { display: flex; gap: 0.7rem; align-items: flex-end; flex-wrap: wrap; }
+.einladen-zeile label { margin: 0; flex: 1; min-width: 180px; }
+.einladen-zeile select { width: auto; }
+.einladen-zeile button { white-space: nowrap; }
+
+h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
+
+/* --- Detailansicht: Kopf + Bewertungs-Panel -------------------------------- */
+.detail-kopf {
+  display: flex; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.detail-kopf h2 { margin: 0.3rem 0 0.2rem; font-size: 1.3rem; }
+.detail-kopf .btn-klein { padding-left: 0; }
+
+.bewertung {
+  background: var(--karte); border: 1px solid var(--rahmen);
+  border-radius: var(--radius); padding: 0.8rem 1rem; min-width: 340px;
+}
+.leer-bewertung { display: flex; align-items: center; }
+.bewertung-zeile {
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem;
+  font-size: 0.85rem;
+}
+.bewertung-zeile .index b { font-size: 1rem; }
+.bewertung-zeile .mini { color: var(--text-schwach); margin-left: auto; }
+
+.preisraster { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; }
+.preis-kachel {
+  display: flex; flex-direction: column; gap: 0.1rem;
+  background: var(--bg); border-radius: var(--radius); padding: 0.45rem 0.6rem;
+}
+.preis-kachel span { font-size: 0.68rem; color: var(--text-schwach); text-transform: uppercase; letter-spacing: 0.03em; }
+.preis-kachel b { font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.preis-kachel.gross { border-left: 3px solid var(--akzent); }
+.preis-kachel.gross b { font-size: 1.05rem; }
+
+.preisband { font-size: 0.8rem; color: var(--text-schwach); margin-top: 0.5rem; }
+.preisband b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* --- Unterreiter ----------------------------------------------------------- */
+.untertabs {
+  display: flex; gap: 0.15rem; flex-wrap: wrap;
+  border-bottom: 1px solid var(--rahmen); margin-bottom: -1px;
+}
+.untertabs button {
+  background: transparent; color: var(--text-schwach); font-size: 0.85rem;
+  padding: 0.5rem 0.8rem; border-radius: var(--radius) var(--radius) 0 0;
+  border: 1px solid transparent; border-bottom: none;
+}
+.untertabs button:hover { color: var(--text); }
+.untertabs button.aktiv {
+  background: var(--karte); color: var(--text); font-weight: 600;
+  border-color: var(--rahmen);
+}
+
+/* --- Baugruppen ------------------------------------------------------------ */
+.baugruppen { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 0.7rem; }
+.baugruppe {
+  border: 1px solid var(--rahmen); border-radius: var(--radius); padding: 0.8rem;
+}
+.bg-kopf { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem; }
+.bg-note-anzeige { margin-left: auto; color: var(--text-schwach); font-size: 0.85rem; }
+.bg-note-anzeige b { color: var(--text); font-size: 1rem; }
+.bg-felder { display: grid; grid-template-columns: 1fr 1fr; gap: 0 0.7rem; margin-top: 0.6rem; }
+.bg-felder label { margin-bottom: 0.5rem; font-size: 0.75rem; }
+.bg-rep-check { align-self: end; margin-bottom: 0.9rem; }
+.bg-felder input:disabled { opacity: 0.45; }
+
+/* --- Karten-Blöcke (Reifen, Schäden, Vergleich) ---------------------------- */
+.karten-liste { display: grid; gap: 0.7rem; }
+.karte-block {
+  border: 1px solid var(--rahmen); border-radius: var(--radius); padding: 0.9rem 1rem;
+}
+.block-kopf { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.6rem; }
+.block-kopf strong { flex: 1; }
+.titel-feld { flex: 1; margin: 0; font-weight: 600; }
+.prio-wahl { width: auto; margin: 0; }
+
+.schaden-karte { border-left: 3px solid var(--rahmen-stark); }
+.schaden-karte.prio-hoch { border-left-color: var(--schlecht); }
+.schaden-karte.prio-mittel { border-left-color: var(--mittel); }
+.schaden-karte.prio-tief { border-left-color: var(--rahmen-stark); }
+
+.listen-aktion { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.listen-aktion input, .listen-aktion select { margin: 0; }
+.listen-aktion input[type="text"] { flex: 1; min-width: 180px; }
+.listen-aktion select, .listen-aktion input[type="date"], .listen-aktion input[type="number"] { width: auto; }
+
+/* --- Kommentare ------------------------------------------------------------ */
+.kommentare { display: grid; gap: 0.6rem; margin-top: 1rem; }
+.kommentar { border: 1px solid var(--rahmen); border-radius: var(--radius); padding: 0.7rem 0.9rem; }
+.komm-kopf { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; }
+.komm-kopf .btn-x { margin-left: auto; width: 24px; height: 24px; }
+.kommentar p { margin: 0.4rem 0 0; white-space: pre-wrap; }
+#komm-form button { margin-top: 0.5rem; }
+
+/* --- Aufgaben -------------------------------------------------------------- */
+.tabelle tr.erledigt td { opacity: 0.5; text-decoration: line-through; }
+.tabelle tr.erledigt .btn-x { text-decoration: none; }
+.ueberfaellig { color: var(--schlecht); font-weight: 600; }
+
+/* --- Marktvergleich -------------------------------------------------------- */
+.hinweis-kasten {
+  background: var(--akzent-schwach); border-left: 3px solid var(--akzent);
+  border-radius: var(--radius); padding: 0.8rem 1rem; margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+.vergleich-schnitt {
+  border: 1px solid var(--rahmen); border-radius: var(--radius);
+  padding: 0.7rem 1rem; margin-bottom: 1rem; font-size: 0.9rem;
+}
+.vgl-badge {
+  background: var(--bg); border: 1px solid var(--rahmen-stark);
+  border-radius: 3px; padding: 0.1rem 0.45rem; font-size: 0.72rem; color: var(--text-schwach);
+}
+
+/* --- Listenkarte: Zusatzangaben ------------------------------------------- */
+.index-badge {
+  margin-left: auto; background: var(--bg); border: 1px solid var(--rahmen-stark);
+  border-radius: 3px; padding: 0 0.35rem; font-size: 0.72rem;
+  color: var(--text-schwach); font-variant-numeric: tabular-nums;
+}
+.karte-reparatur { font-size: 0.75rem; color: var(--mittel); margin-bottom: 0.4rem; }
+.karte-preis .vk { color: var(--text-schwach); font-weight: 400; font-size: 0.75rem; margin-left: 0.4rem; }
+
+/* --- Hinweisboxen ---------------------------------------------------------- */
+.hinweis-box {
+  max-width: 560px; margin: 4rem auto; background: var(--karte);
+  border: 1px solid var(--rahmen); padding: 2rem; border-radius: var(--radius);
+}
+.hinweis-box h2 { margin-top: 0; }
+.hinweis-box code {
+  background: var(--bg); border: 1px solid var(--rahmen);
+  padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.85em;
+}
+
+/* --- Mobil / Tablet -------------------------------------------------------- */
+@media (max-width: 700px) {
+  body { font-size: 16px; }
+  .topbar { flex-direction: column; align-items: stretch; gap: 0.5rem; padding: 0.7rem 0.9rem; }
+  .marke { justify-content: center; }
+  .tabs { justify-content: center; }
+  .tabs button { padding: 0.6rem 0.9rem; }   /* grössere Klickflächen unterwegs */
+  .user { justify-content: center; }
+  main { padding: 1rem 0.8rem; }
+  .filterleiste { flex-wrap: wrap; }
+  .filterleiste #f-text { flex-basis: 100%; }
+  .filterleiste #f-sort { flex: 1; }
+  .formular { padding: 1.1rem; }
+  .btn-primary, .btn-sekundaer { padding: 0.7rem 1.1rem; }
+
+  /* Detailansicht */
+  .bewertung { min-width: 0; width: 100%; }
+  .preisraster { grid-template-columns: 1fr 1fr; }
+  .untertabs { overflow-x: auto; flex-wrap: nowrap; }
+  .untertabs button { white-space: nowrap; }
+  .bg-felder { grid-template-columns: 1fr; }
+  .bg-rep-check { margin-bottom: 0.5rem; }
+  .listen-aktion > * { flex: 1 1 100%; width: 100%; }
+}
