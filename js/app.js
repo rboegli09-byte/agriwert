@@ -15,6 +15,7 @@ import { supabase, istKonfiguriert } from './supabase.js';
 import { APP_NAME } from './config.js';
 import { formatPreis, mitStandardwerten } from './pricing.js';
 import { renderMaschine } from './machine-form.js';
+import { renderDashboard } from './dashboard.js';
 import { esc } from './util.js';
 
 // --- Zentraler Zustand -------------------------------------------------------
@@ -188,6 +189,8 @@ function registrierFehlerText(error) {
 // ============================================================================
 async function nachLogin() {
   await Promise.all([ladeProfil(), ladeSettings(), ladeMaschinen()]);
+  // Dashboard-Zeilen sollen eine Maschine öffnen können
+  state.oeffneMaschine = oeffneMaschine;
   abonniereEchtzeit();
   render();
 }
@@ -235,6 +238,7 @@ function render() {
     <header class="topbar">
       <div class="marke">${LOGO_SVG}<span>${APP_NAME}</span></div>
       <nav class="tabs">
+        <button data-tab="dashboard" class="${tabCls('dashboard')}">Dashboard</button>
         <button data-tab="liste"  class="${tabCls('liste')}">Maschinen</button>
         <button data-tab="neu"    class="${tabCls('neu')}">Neue Maschine</button>
         ${istAdmin() ? `<button data-tab="einstellungen" class="${tabCls('einstellungen')}">Einstellungen</button>` : ''}
@@ -254,7 +258,8 @@ function render() {
   );
   $('#logout').addEventListener('click', () => supabase.auth.signOut());
 
-  if (state.tab === 'liste') renderListe();
+  if (state.tab === 'dashboard') renderDashboard($('#content'), state);
+  else if (state.tab === 'liste') renderListe();
   else if (state.tab === 'neu' || state.tab === 'bearbeiten') renderFormular();
   else if (state.tab === 'einstellungen') renderEinstellungen();
   else if (state.tab === 'benutzer') renderBenutzer();
@@ -448,6 +453,7 @@ function ampelKlasse(note) {
   return 'rot';
 }
 
+// Wird auch vom Dashboard aufgerufen (siehe state.oeffneMaschine)
 function oeffneMaschine(id) {
   state.editMachine = state.machines.find((m) => m.id === id) || null;
   state.tab = 'bearbeiten';

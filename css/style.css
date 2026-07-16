@@ -425,6 +425,60 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
 .karte-reparatur { font-size: 0.75rem; color: var(--mittel); margin-bottom: 0.4rem; }
 .karte-preis .vk { color: var(--text-schwach); font-weight: 400; font-size: 0.75rem; margin-left: 0.4rem; }
 
+/* --- Dashboard ------------------------------------------------------------- */
+.kennzahlen {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 0.6rem; margin-bottom: 1.2rem;
+}
+.kennzahl {
+  background: var(--karte); border: 1px solid var(--rahmen);
+  border-radius: var(--radius); padding: 0.8rem 0.9rem;
+  display: flex; flex-direction: column; gap: 0.15rem;
+}
+.kennzahl span {
+  font-size: 0.7rem; color: var(--text-schwach);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.kennzahl b { font-size: 1.35rem; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.kennzahl.warn { border-left: 3px solid var(--mittel); }
+.kennzahl.warn b { color: var(--mittel); }
+
+.dash-raster { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+.dash-block {
+  background: var(--karte); border: 1px solid var(--rahmen);
+  border-radius: var(--radius); padding: 1rem;
+}
+.dash-block.breit { grid-column: 1 / -1; }
+.dash-block h3 {
+  margin: 0 0 0.8rem; font-size: 0.78rem; color: var(--text-schwach);
+  text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;
+}
+.dash-block .tabelle { border: none; }
+.tabelle .zahl { text-align: right; font-variant-numeric: tabular-nums; }
+.tabelle.schmal td { padding: 0.45rem 0; }
+.tabelle tr.klickbar { cursor: pointer; }
+.tabelle tr.klickbar:hover td { background: var(--bg); }
+
+/* Balkendiagramm */
+.balken { display: grid; gap: 0.45rem; }
+.balken-zeile { display: grid; grid-template-columns: 100px 1fr auto; gap: 0.6rem; align-items: center; font-size: 0.8rem; }
+.balken-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-schwach); }
+.balken-spur { background: var(--bg); border-radius: 3px; height: 16px; overflow: hidden; }
+.balken-fuellung { display: block; height: 100%; background: var(--akzent); border-radius: 3px; }
+.balken-wert { color: var(--text-schwach); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 0.75rem; }
+
+/* Ampel-Verteilung */
+.ampel-balken {
+  display: flex; height: 22px; border-radius: 3px; overflow: hidden;
+  background: var(--bg); margin-bottom: 0.7rem;
+}
+.ampel-teil.gruen { background: var(--gut); }
+.ampel-teil.gelb { background: var(--mittel); }
+.ampel-teil.rot { background: var(--schlecht); }
+.ampel-legende { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.78rem; color: var(--text-schwach); }
+.ampel-legende span { display: flex; align-items: center; gap: 0.35rem; }
+.ampel-legende b { color: var(--text); }
+
 /* --- Hinweisboxen ---------------------------------------------------------- */
 .hinweis-box {
   max-width: 560px; margin: 4rem auto; background: var(--karte);
@@ -459,4 +513,9 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
   .bg-felder { grid-template-columns: 1fr; }
   .bg-rep-check { margin-bottom: 0.5rem; }
   .listen-aktion > * { flex: 1 1 100%; width: 100%; }
+
+  /* Dashboard */
+  .dash-raster { grid-template-columns: 1fr; }
+  .balken-zeile { grid-template-columns: 80px 1fr; }
+  .balken-wert { grid-column: 2; }
 }
