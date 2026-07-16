@@ -15,7 +15,7 @@ import { FOTO_KATEGORIEN } from './config.js';
 import {
   bewerteMaschine, mitStandardwerten, formatPreis, vergleichbarkeit,
 } from './pricing.js';
-import { ladeFotoHoch, fotoUrl, loescheFoto } from './photos.js';
+import { ladeFotoHoch, fotoUrl, loescheFoto, loescheAlleFotosVonMaschine } from './photos.js';
 import {
   esc, $, $$, datum, datumZeit, entprellen, leerZuNull, zuGanzzahl, zuZahl,
 } from './util.js';
@@ -405,12 +405,48 @@ async function zeigeKonflikt() {
   }
 }
 
+/**
+ * Löscht die Maschine mit allem, was daran hängt.
+ *
+ * Reihenfolge ist wichtig: ZUERST die Bilddateien aus dem Speicher, DANN die
+ * Maschine. Andersherum wäre die machine_photos-Tabelle schon leer (cascade)
+ * und wir wüssten nicht mehr, welche Dateien zu löschen sind – sie würden für
+ * immer Speicherplatz belegen.
+ */
 async function loescheMaschine() {
-  if (!confirm('Diese Maschine mit allen Bewertungen, Fotos und Kommentaren löschen? Das kann nicht rückgängig gemacht werden.')) return;
-  const { error } = await supabase.from('machines').delete().eq('id', ctx.machine.id);
-  if (error) { alert('Löschen fehlgeschlagen: ' + error.message); return; }
-  ctx.onGespeichert?.();
-  ctx.onClose();
+  const titel = [ctx.machine.hersteller || ctx.machine.marke, ctx.machine.modell]
+    .filter(Boolean).join(' ') || 'diese Maschine';
+  const anzahlFotos = ctx.daten.fotos.length;
+
+  if (!confirm(
+    `„${titel}" wirklich löschen?\n\n` +
+    'Gelöscht werden: Stammdaten, alle Baugruppen-Bewertungen, Reifen, ' +
+    `Schäden, Kommentare, Aufgaben, Vergleichsmaschinen${anzahlFotos ? ` und ${anzahlFotos} Foto(s)` : ''}.\n\n` +
+    'Das kann NICHT rückgängig gemacht werden.'
+  )) return;
+
+  const knopf = $('#loeschen', ctx.host);
+  if (knopf) { knopf.disabled = true; knopf.textContent = 'Lösche …'; }
+
+  try {
+    // 1) Bilddateien aus dem Speicher entfernen
+    await loescheAlleFotosVonMaschine(ctx.machine.id);
+
+    // 2) Maschine löschen – die Datenbank räumt alles Verknüpfte mit weg
+    const { error } = await supabase.from('machines').delete().eq('id', ctx.machine.id);
+    if (error) throw error;
+
+    ctx.onGespeichert?.();
+    ctx.onClose();
+  } catch (err) {
+    if (knopf) { knopf.disabled = false; knopf.textContent = 'Maschine löschen'; }
+    const text = err?.message || String(err);
+    $('#stamm-fehler', ctx.host).textContent =
+      'Löschen fehlgeschlagen: ' + text +
+      (/row-level security|not authorized|violates/i.test(text)
+        ? ' – Löschen darf nur, wer die Maschine angelegt hat, oder ein Administrator.'
+        : '');
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -752,11 +788,15 @@ function zeichneFotos(c) {
 
   $$('.foto-x', c).forEach((b) =>
     b.addEventListener('click', async () => {
-      if (!confirm('Foto löschen?')) return;
+      if (!confirm('Foto endgültig löschen?')) return;
       const foto = ctx.daten.fotos.find((f) => f.id === b.dataset.foto);
-      await loescheFoto(foto);
-      ctx.daten.fotos = ctx.daten.fotos.filter((f) => f.id !== foto.id);
-      zeichne();
+      try {
+        await loescheFoto(foto);
+        ctx.daten.fotos = ctx.daten.fotos.filter((f) => f.id !== foto.id);
+        zeichne();
+      } catch (err) {
+        $('#foto-status', c).textContent = 'Foto konnte nicht gelöscht werden: ' + (err.message || err);
+      }
     })
   );
 }

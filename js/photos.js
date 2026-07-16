@@ -72,8 +72,35 @@ export function fotoUrl(storagePath) {
 
 /** Foto aus Storage und Datenbank löschen. */
 export async function loescheFoto(foto) {
-  await supabase.storage.from(PHOTO_BUCKET).remove([foto.storage_path]);
+  const { error } = await supabase.storage.from(PHOTO_BUCKET).remove([foto.storage_path]);
+  if (error) throw error;
   await supabase.from('machine_photos').delete().eq('id', foto.id);
+}
+
+/**
+ * Löscht ALLE Bilddateien einer Maschine aus dem Speicher.
+ *
+ * Wichtig: Beim Löschen einer Maschine räumt die Datenbank zwar die Einträge
+ * in machine_photos automatisch weg (on delete cascade) – die eigentlichen
+ * Bilddateien im Storage bleiben davon aber unberührt. Ohne diesen Aufruf
+ * würden sie für immer Speicherplatz belegen, ohne dass man sie noch findet.
+ *
+ * Alle Fotos einer Maschine liegen im Ordner "<machine_id>/" – wir listen ihn
+ * und löschen alles darin.
+ *
+ * @returns {Promise<number>} Anzahl gelöschter Dateien
+ */
+export async function loescheAlleFotosVonMaschine(machineId) {
+  const { data, error } = await supabase.storage.from(PHOTO_BUCKET).list(machineId, {
+    limit: 1000,
+  });
+  if (error) throw error;
+  if (!data || data.length === 0) return 0;
+
+  const pfade = data.map((f) => `${machineId}/${f.name}`);
+  const { error: loeschFehler } = await supabase.storage.from(PHOTO_BUCKET).remove(pfade);
+  if (loeschFehler) throw loeschFehler;
+  return pfade.length;
 }
 
 function zufall() {
