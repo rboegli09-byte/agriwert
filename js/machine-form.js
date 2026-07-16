@@ -19,6 +19,10 @@ import { ladeFotoHoch, fotoUrl, loescheFoto, loescheAlleFotosVonMaschine } from 
 import {
   esc, $, $$, datum, datumZeit, entprellen, leerZuNull, zuGanzzahl, zuZahl,
 } from './util.js';
+import {
+  STATUS, statusMarke, statusLabel, ladeFreigaben, freigeben,
+  freigabeZurueckziehen, alsEingekauft, alsVerkauft, statusZuruecksetzen,
+} from './status.js';
 
 const REIFEN_POSITIONEN = [
   'Vorne links', 'Vorne rechts', 'Hinten links', 'Hinten rechts',
@@ -63,6 +67,7 @@ export async function renderMaschine(host, optionen) {
     // öffnet sich zum ANSEHEN – erst der Stift oben rechts schaltet um.
     modus: istEntwurf ? 'bearbeiten' : 'ansicht',
     daten: { baugruppen: [], reifen: [], schaeden: [], fotos: [], kommentare: [], aufgaben: [], vergleiche: [], verlauf: [] },
+    freigaben: [],
     profile: [],
     pendingFotos: [],
     entwurf: {},          // Stammdaten-Eingaben, solange nicht gespeichert
@@ -87,6 +92,7 @@ function setzeModus(modus) {
 // ============================================================================
 async function ladeDetails() {
   const id = ctx.machine.id;
+  ctx.freigaben = await ladeFreigaben(id);
   const [bg, rf, sch, ft, km, af, vg, vl, pr] = await Promise.all([
     supabase.from('baugruppen').select('*').eq('machine_id', id).order('sortierung'),
     supabase.from('reifen').select('*').eq('machine_id', id).order('created_at'),
@@ -138,7 +144,7 @@ function zeichne() {
     <div class="detail-kopf">
       <div class="detail-titel">
         <button class="btn-klein" id="zurueck">← Zurück zur Liste</button>
-        <h2>${esc(titel)}</h2>
+        <h2>${esc(titel)} ${ctx.neu ? '' : statusMarke(ctx.machine.status)}</h2>
         ${ctx.neu ? '' : `<p class="mini-hinweis">Zuletzt geändert ${datumZeit(ctx.machine.updated_at)} · Version ${ctx.machine.version ?? 1}</p>`}
       </div>
 
@@ -169,6 +175,8 @@ function zeichne() {
       : bearbeitbar()
         ? '<div class="modus-band">Bearbeitungsmodus – Änderungen werden gespeichert.</div>' : ''}
 
+    ${ctx.neu ? '' : '<div id="status-leiste"></div>'}
+
     <nav class="untertabs">
       ${tabs.map(([id, label]) =>
         `<button data-utab="${id}" class="${ctx.tab === id ? 'aktiv' : ''}">${esc(label)}</button>`).join('')}
@@ -190,7 +198,190 @@ function zeichne() {
   $('#verwerfen-btn', ctx.host)?.addEventListener('click', verwerfeEntwurf);
 
   zeichneBewertung();
+  if (!ctx.neu) zeichneStatusLeiste();
   zeichneInhalt();
+}
+
+// ============================================================================
+// STATUS-LEISTE – Fortschritt und der jeweils nächste Schritt
+// ============================================================================
+function zeichneStatusLeiste() {
+  const ziel = $('#status-leiste', ctx.host);
+  if (!ziel) return;
+
+  const m = ctx.machine;
+  const status = m.status ?? 'bewertet';
+  const noetig = ctx.state.settings?.freigaben_noetig ?? 2;
+  const anzahl = ctx.freigaben.length;
+  const eigene = ctx.freigaben.some((f) => f.benutzer === ctx.state.user.id);
+
+  ziel.innerHTML = `
+    <div class="status-leiste">
+      <ol class="status-schritte">
+        ${Object.entries(STATUS).map(([schluessel, s]) => {
+          const erreicht = STATUS[status].reihe >= s.reihe;
+          const jetzt = schluessel === status;
+          return `<li class="${erreicht ? 'erreicht' : ''} ${jetzt ? 'jetzt' : ''}">
+            <span class="punkt"></span>${esc(s.label)}</li>`;
+        }).join('')}
+      </ol>
+
+      <div class="status-aktion">
+        ${statusAktionHtml(status, anzahl, noetig, eigene)}
+      </div>
+    </div>
+
+    ${status === 'bewertet' || status === 'freigegeben' ? `
+      <div class="freigabe-kasten">
+        <div class="freigabe-kopf">
+          <b>Freigaben zum Preis: ${anzahl} von ${noetig}</b>
+          <span class="mini-hinweis">Ab ${noetig} Okey wechselt der Status automatisch auf „Freigegeben".</span>
+        </div>
+        <div class="freigabe-wer">
+          ${anzahl === 0 ? '<span class="mini-hinweis">Noch niemand hat freigegeben.</span>'
+            : ctx.freigaben.map((f) => `
+              <span class="freigabe-chip" title="${esc(datumZeit(f.created_at))}">
+                ✓ ${esc(benutzerName(f.benutzer))}</span>`).join('')}
+        </div>
+        <button type="button" class="${eigene ? 'btn-sekundaer' : 'btn-primary'}" id="freigabe-btn">
+          ${eigene ? 'Meine Freigabe zurückziehen' : 'Preis freigeben (mein Okey)'}
+        </button>
+        <span class="fehler" id="status-fehler"></span>
+      </div>` : ''}
+
+    ${status === 'verkauft' ? verkaufsKastenHtml(m) : ''}`;
+
+  $('#freigabe-btn', ziel)?.addEventListener('click', () => umschaltenFreigabe(eigene));
+  $('#eingekauft-btn', ziel)?.addEventListener('click', markiereEingekauft);
+  $('#verkauft-btn', ziel)?.addEventListener('click', zeigeVerkaufsDialog);
+  $('#zurueck-btn', ziel)?.addEventListener('click', () => schrittZurueck(status));
+}
+
+/** Der Knopf, der zum jeweils nächsten Schritt führt. */
+function statusAktionHtml(status, anzahl, noetig, eigene) {
+  if (status === 'bewertet') {
+    return `<span class="mini-hinweis">Es fehlen noch ${Math.max(0, noetig - anzahl)} Freigabe(n),
+      damit die Maschine eingekauft werden kann.</span>`;
+  }
+  if (status === 'freigegeben') {
+    return `<button type="button" class="btn-primary" id="eingekauft-btn">Als eingekauft markieren</button>`;
+  }
+  if (status === 'eingekauft') {
+    return `<button type="button" class="btn-primary" id="verkauft-btn">Als verkauft markieren</button>
+            <button type="button" class="btn-klein" id="zurueck-btn">Einkauf rückgängig</button>`;
+  }
+  return `<button type="button" class="btn-klein" id="zurueck-btn">Verkauf rückgängig</button>`;
+}
+
+function verkaufsKastenHtml(m) {
+  return `
+    <div class="verkauf-kasten">
+      <h3>Verkauf</h3>
+      <dl class="datenliste">
+        <div><dt>Verkaufspreis</dt><dd><b>${formatPreis(m.verkaufspreis_tatsaechlich, ctx.state.settings?.waehrung)}</b></dd></div>
+        <div><dt>Verkauft am</dt><dd>${datum(m.verkauft_am)}</dd></div>
+        <div><dt>Käufer</dt><dd>${esc(m.kaeufer || '–')}</dd></div>
+        <div><dt>Erfasst von</dt><dd>${esc(benutzerName(m.verkauft_von))}</dd></div>
+        ${m.ankaufspreis ? `<div><dt>Marge gegenüber Ankaufspreis</dt><dd><b class="${
+          (m.verkaufspreis_tatsaechlich ?? 0) - m.ankaufspreis >= 0 ? 'gut-text' : 'warn-text'
+        }">${formatPreis((m.verkaufspreis_tatsaechlich ?? 0) - m.ankaufspreis, ctx.state.settings?.waehrung)}</b></dd></div>` : ''}
+      </dl>
+    </div>`;
+}
+
+async function umschaltenFreigabe(hatEigene) {
+  const fehler = $('#status-fehler', ctx.host);
+  if (fehler) fehler.textContent = '';
+  try {
+    if (hatEigene) await freigabeZurueckziehen(ctx.machine.id, ctx.state.user.id);
+    else await freigeben(ctx.machine.id, ctx.state.user.id);
+
+    // Der Status wird von der Datenbank gesetzt – darum frisch laden.
+    await ladeMaschineNeu();
+  } catch (err) {
+    if (fehler) fehler.textContent = 'Fehler: ' + (err.message || err);
+  }
+}
+
+async function markiereEingekauft() {
+  try {
+    ctx.machine = await alsEingekauft(ctx.machine, ctx.state.user.id);
+    ctx.onGespeichert?.();
+    zeichne();
+  } catch (err) {
+    alert(err.message || err);
+  }
+}
+
+async function schrittZurueck(status) {
+  const ziel = status === 'verkauft' ? 'eingekauft' : 'freigegeben';
+  if (!confirm(`Wirklich zurück auf „${statusLabel(ziel)}"?`)) return;
+  try {
+    ctx.machine = await statusZuruecksetzen(ctx.machine, ziel);
+    ctx.onGespeichert?.();
+    zeichne();
+  } catch (err) {
+    alert(err.message || err);
+  }
+}
+
+/** Lädt Maschine und Freigaben frisch – nötig, weil der Trigger den Status setzt. */
+async function ladeMaschineNeu() {
+  const { data } = await supabase.from('machines').select('*').eq('id', ctx.machine.id).single();
+  if (data) ctx.machine = data;
+  ctx.freigaben = await ladeFreigaben(ctx.machine.id);
+  ctx.onGespeichert?.();
+  zeichne();
+}
+
+// ============================================================================
+// Verkaufs-Dialog
+// ============================================================================
+function zeigeVerkaufsDialog() {
+  const vorschlag = ctx.machine.verkaufspreis ?? ctx.machine.marktwert ?? '';
+  const box = document.createElement('div');
+  box.className = 'dialog-hinter';
+  box.innerHTML = `
+    <form class="dialog" id="verkauf-form">
+      <h3>Maschine als verkauft markieren</h3>
+      <label>Tatsächlicher Verkaufspreis (${esc(ctx.state.settings?.waehrung ?? 'CHF')})
+        <input type="number" id="vk-preis" value="${vorschlag}" required>
+      </label>
+      <label>Verkaufsdatum
+        <input type="date" id="vk-datum" value="${new Date().toISOString().slice(0, 10)}" required>
+      </label>
+      <label>Käufer
+        <input type="text" id="vk-kaeufer" placeholder="Name oder Firma">
+      </label>
+      <p class="mini-hinweis">Vorgeschlagen ist der berechnete Verkaufspreis – trag ein, was
+        tatsächlich bezahlt wurde. So siehst du später, wie gut die Bewertung war.</p>
+      <div class="dialog-aktionen">
+        <button type="submit" class="btn-primary">Als verkauft markieren</button>
+        <button type="button" class="btn-klein" id="vk-abbrechen">Abbrechen</button>
+      </div>
+      <span class="fehler" id="vk-fehler"></span>
+    </form>`;
+  document.body.appendChild(box);
+
+  const zu = () => box.remove();
+  $('#vk-abbrechen', box).addEventListener('click', zu);
+  box.addEventListener('click', (e) => { if (e.target === box) zu(); });
+
+  $('#verkauf-form', box).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      ctx.machine = await alsVerkauft(ctx.machine, ctx.state.user.id, {
+        preis: zuZahl($('#vk-preis', box).value),
+        datum: $('#vk-datum', box).value,
+        kaeufer: leerZuNull($('#vk-kaeufer', box).value),
+      });
+      zu();
+      ctx.onGespeichert?.();
+      zeichne();
+    } catch (err) {
+      $('#vk-fehler', box).textContent = err.message || err;
+    }
+  });
 }
 
 const bewerteteBaugruppen = () => ctx.daten.baugruppen.filter((b) => b.note != null).length;

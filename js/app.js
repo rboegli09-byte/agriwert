@@ -16,6 +16,7 @@ import { APP_NAME } from './config.js';
 import { formatPreis, mitStandardwerten } from './pricing.js';
 import { renderMaschine } from './machine-form.js';
 import { renderDashboard } from './dashboard.js';
+import { STATUS, STATUS_REIHENFOLGE, statusMarke } from './status.js';
 import { esc } from './util.js';
 
 // --- Zentraler Zustand -------------------------------------------------------
@@ -356,7 +357,7 @@ const tabCls = (t) => (state.tab === t || (t === 'neu' && state.tab === 'bearbei
 
 /** Aktive Filter (bleiben erhalten, solange man im Reiter bleibt). */
 const filter = {
-  text: '', kategorie: '', hersteller: '', baujahrVon: '', baujahrBis: '',
+  text: '', status: '', kategorie: '', hersteller: '', baujahrVon: '', baujahrBis: '',
   stundenMax: '', zustandMin: '', standort: '', preisVon: '', preisBis: '',
   sort: 'updated', erweitert: false,
 };
@@ -390,6 +391,13 @@ function renderListe() {
     </div>
 
     <div class="filter-erweitert" id="filter-erweitert" ${filter.erweitert ? '' : 'hidden'}>
+      <label>Status
+        <select id="f-status">
+          <option value="">alle</option>
+          ${STATUS_REIHENFOLGE.map((s) => `
+            <option value="${s}" ${filter.status === s ? 'selected' : ''}>${esc(STATUS[s].label)}</option>`).join('')}
+        </select>
+      </label>
       <label>Kategorie
         <select id="f-kategorie">
           <option value="">alle</option>
@@ -424,6 +432,7 @@ function renderListe() {
 
   bind('#f-text', 'text');
   bind('#f-sort', 'sort', 'change');
+  bind('#f-status', 'status', 'change');
   bind('#f-kategorie', 'kategorie', 'change');
   bind('#f-hersteller', 'hersteller', 'change');
   ['baujahrVon', 'baujahrBis', 'stundenMax', 'zustandMin', 'standort', 'preisVon', 'preisBis']
@@ -438,7 +447,7 @@ function renderListe() {
 
   $('#f-reset').addEventListener('click', () => {
     Object.assign(filter, {
-      text: '', kategorie: '', hersteller: '', baujahrVon: '', baujahrBis: '',
+      text: '', status: '', kategorie: '', hersteller: '', baujahrVon: '', baujahrBis: '',
       stundenMax: '', zustandMin: '', standort: '', preisVon: '', preisBis: '',
     });
     renderListe();
@@ -449,7 +458,7 @@ function renderListe() {
 
 /** Zählt, wie viele der erweiterten Filter gesetzt sind (für die Anzeige am Knopf). */
 function anzahlAktiveFilter() {
-  return ['kategorie', 'hersteller', 'baujahrVon', 'baujahrBis', 'stundenMax',
+  return ['status', 'kategorie', 'hersteller', 'baujahrVon', 'baujahrBis', 'stundenMax',
     'zustandMin', 'standort', 'preisVon', 'preisBis']
     .filter((k) => filter[k] !== '').length;
 }
@@ -470,6 +479,7 @@ function filtereMaschinen() {
         .filter(Boolean).join(' ').toLowerCase();
       if (!heuhaufen.includes(text)) return false;
     }
+    if (filter.status && (m.status ?? 'bewertet') !== filter.status) return false;
     if (filter.kategorie === '__ohne' && m.kategorie_id) return false;
     if (filter.kategorie && filter.kategorie !== '__ohne' && m.kategorie_id !== filter.kategorie) return false;
     if (filter.hersteller && m.hersteller !== filter.hersteller) return false;
@@ -496,19 +506,45 @@ function filtereMaschinen() {
   return liste.sort(sortierer[filter.sort] || sortierer['updated']);
 }
 
-/** Zeichnet nur den Ergebnisbereich neu (Filterleiste bleibt stehen). */
+/**
+ * Zeichnet nur den Ergebnisbereich neu (Filterleiste bleibt stehen).
+ * Die Maschinen sind nach Status in Untergruppen aufgeteilt.
+ */
 function zeigeErgebnisse() {
   const liste = filtereMaschinen();
   const summe = liste.reduce((s, m) => s + (m.marktwert ?? m.berechneter_preis ?? 0), 0);
+
+  // Nach Status gruppieren, in der Reihenfolge des Ablaufs
+  const gruppen = STATUS_REIHENFOLGE
+    .map((s) => [s, liste.filter((m) => (m.status ?? 'bewertet') === s)])
+    .filter(([, maschinen]) => maschinen.length > 0);
 
   $('#ergebnisse').innerHTML = `
     <div class="ergebnis-kopf">
       <span>${liste.length} von ${state.machines.length} Maschinen</span>
       ${summe > 0 ? `<span>Gesamtwert: <b>${formatPreis(summe, state.settings?.waehrung)}</b></span>` : ''}
     </div>
-    <div class="karten">
-      ${liste.map(kartenHtml).join('') || '<p class="leer">Keine Maschine entspricht der Suche.</p>'}
-    </div>`;
+
+    ${gruppen.length === 0
+      ? '<p class="leer">Keine Maschine entspricht der Suche.</p>'
+      : gruppen.map(([s, maschinen]) => {
+          const gruppenSumme = maschinen.reduce((sum, m) =>
+            sum + (s === 'verkauft'
+              ? (m.verkaufspreis_tatsaechlich ?? 0)
+              : (m.marktwert ?? m.berechneter_preis ?? 0)), 0);
+          return `
+            <section class="status-gruppe">
+              <h3 class="gruppen-kopf">
+                <span class="gruppen-punkt status-${STATUS[s].farbe}"></span>
+                ${esc(STATUS[s].label)}
+                <span class="gruppen-anzahl">${maschinen.length}</span>
+                ${gruppenSumme > 0 ? `<span class="gruppen-summe">${
+                  s === 'verkauft' ? 'Verkaufserlös' : 'Wert'}: ${formatPreis(gruppenSumme, state.settings?.waehrung)}</span>` : ''}
+              </h3>
+              <p class="gruppen-hilfe">${esc(STATUS[s].hilfe)}</p>
+              <div class="karten">${maschinen.map(kartenHtml).join('')}</div>
+            </section>`;
+        }).join('')}`;
 
   $('#ergebnisse').querySelectorAll('[data-open]').forEach((el) =>
     el.addEventListener('click', () => oeffneMaschine(el.dataset.open))
@@ -535,10 +571,13 @@ function kartenHtml(m) {
       </div>
       ${m.reparaturkosten > 0
         ? `<div class="karte-reparatur">Reparaturbedarf ${formatPreis(m.reparaturkosten, '')}</div>` : ''}
-      <div class="karte-preis">${marktwert != null
-        ? `${formatPreis(marktwert, state.settings?.waehrung)}
-           ${m.verkaufspreis != null ? `<small class="vk">VK ${formatPreis(m.verkaufspreis, '')}</small>` : ''}`
-        : '<span class="kein-preis">kein Preis</span>'}</div>
+      ${m.status === 'verkauft'
+        ? `<div class="karte-preis">${formatPreis(m.verkaufspreis_tatsaechlich, state.settings?.waehrung)}
+             <small class="vk">verkauft${m.kaeufer ? ' an ' + esc(m.kaeufer) : ''}</small></div>`
+        : `<div class="karte-preis">${marktwert != null
+            ? `${formatPreis(marktwert, state.settings?.waehrung)}
+               ${m.verkaufspreis != null ? `<small class="vk">VK ${formatPreis(m.verkaufspreis, '')}</small>` : ''}`
+            : '<span class="kein-preis">kein Preis</span>'}</div>`}
     </div>`;
 }
 

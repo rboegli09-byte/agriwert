@@ -582,6 +582,106 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
 }
 .lightbox-x:hover { background: rgba(255, 255, 255, 0.3); }
 
+/* --- Status ---------------------------------------------------------------- */
+:root {
+  --st-grau: #6b7680;
+  --st-blau: #2f6fa8;
+  --st-gruen: #2b6a4b;
+  --st-dunkel: #4a3f6b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --st-grau: #8d979e; --st-blau: #5b9dd6; --st-gruen: #4e9c74; --st-dunkel: #9481c9;
+  }
+}
+
+.status-marke {
+  display: inline-block; vertical-align: middle;
+  font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 0.15rem 0.55rem; border-radius: 999px; margin-left: 0.5rem;
+  border: 1px solid currentColor;
+}
+.status-grau { color: var(--st-grau); }
+.status-blau { color: var(--st-blau); }
+.status-gruen { color: var(--st-gruen); }
+.status-dunkel { color: var(--st-dunkel); }
+
+/* Fortschritts-Schritte */
+.status-leiste {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+  flex-wrap: wrap; background: var(--karte); border: 1px solid var(--rahmen);
+  border-radius: var(--radius); padding: 0.8rem 1rem; margin-bottom: 0.8rem;
+}
+.status-schritte { display: flex; list-style: none; margin: 0; padding: 0; gap: 0; flex-wrap: wrap; }
+.status-schritte li {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.85rem; color: var(--text-schwach); padding-right: 1.4rem; position: relative;
+}
+.status-schritte li:not(:last-child)::after {
+  content: ''; position: absolute; right: 0.5rem; top: 50%;
+  width: 0.7rem; height: 1px; background: var(--rahmen-stark);
+}
+.status-schritte .punkt {
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--rahmen-stark); background: var(--karte);
+}
+.status-schritte li.erreicht { color: var(--text); }
+.status-schritte li.erreicht .punkt { background: var(--akzent); border-color: var(--akzent); }
+.status-schritte li.jetzt { font-weight: 700; }
+.status-schritte li.jetzt .punkt { box-shadow: 0 0 0 3px var(--akzent-schwach); }
+.status-aktion { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+
+/* Freigabe-Kasten */
+.freigabe-kasten {
+  background: var(--karte); border: 1px solid var(--rahmen);
+  border-left: 3px solid var(--akzent);
+  border-radius: var(--radius); padding: 0.9rem 1rem; margin-bottom: 0.8rem;
+}
+.freigabe-kopf { display: flex; gap: 0.8rem; align-items: baseline; flex-wrap: wrap; }
+.freigabe-wer { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0.6rem 0; }
+.freigabe-chip {
+  background: var(--akzent-schwach); color: var(--akzent);
+  border-radius: 999px; padding: 0.2rem 0.7rem; font-size: 0.85rem; font-weight: 500;
+}
+
+/* Verkaufs-Angaben */
+.verkauf-kasten {
+  background: var(--karte); border: 1px solid var(--rahmen);
+  border-left: 3px solid var(--st-dunkel);
+  border-radius: var(--radius); padding: 0.9rem 1rem; margin-bottom: 0.8rem;
+}
+.verkauf-kasten h3 { margin: 0 0 0.6rem; font-size: 0.82rem; color: var(--text-schwach);
+  text-transform: uppercase; letter-spacing: 0.05em; }
+.gut-text { color: var(--gut); }
+
+/* Untergruppen in der Liste */
+.status-gruppe { margin-bottom: 1.8rem; }
+.gruppen-kopf {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  margin: 0 0 0.2rem; font-size: 1.05rem;
+  border-bottom: 1px solid var(--rahmen); padding-bottom: 0.4rem;
+}
+.gruppen-punkt { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.gruppen-anzahl {
+  background: var(--bg); border: 1px solid var(--rahmen-stark);
+  border-radius: 999px; padding: 0 0.5rem; font-size: 0.78rem;
+  color: var(--text-schwach); font-weight: 400;
+}
+.gruppen-summe { margin-left: auto; font-size: 0.82rem; color: var(--text-schwach); font-weight: 400; }
+.gruppen-hilfe { margin: 0 0 0.7rem; font-size: 0.8rem; color: var(--text-schwach); }
+
+/* --- Dialog ---------------------------------------------------------------- */
+.dialog-hinter {
+  position: fixed; inset: 0; z-index: 90; background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.dialog {
+  background: var(--karte); border-radius: var(--radius); padding: 1.5rem;
+  width: 100%; max-width: 400px; border: 1px solid var(--rahmen);
+}
+.dialog h3 { margin: 0 0 1rem; font-size: 1.1rem; }
+.dialog-aktionen { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.5rem; }
+
 /* --- Hinweisboxen ---------------------------------------------------------- */
 .hinweis-box {
   max-width: 560px; margin: 4rem auto; background: var(--karte);
