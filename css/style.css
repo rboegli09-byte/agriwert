@@ -256,7 +256,9 @@ input[type="range"] { padding: 0; accent-color: var(--akzent); }
 /* --- Fotos ----------------------------------------------------------------- */
 .foto-upload { display: flex; gap: 0.8rem; align-items: flex-end; flex-wrap: wrap; }
 .foto-upload label { margin: 0; }
-.foto-upload select { width: auto; }
+.foto-upload select { width: auto; min-width: 140px; }
+.foto-knoepfe { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.foto-knoepfe button { white-space: nowrap; }
 .foto-galerie {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   gap: 0.5rem; margin-top: 1rem;
@@ -518,4 +520,10 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
   .dash-raster { grid-template-columns: 1fr; }
   .balken-zeile { grid-template-columns: 80px 1fr; }
   .balken-wert { grid-column: 2; }
+
+  /* Fotos: unterwegs grosse Klickflächen, Knöpfe über die volle Breite */
+  .foto-upload { align-items: stretch; }
+  .foto-upload label, .foto-upload select { width: 100%; }
+  .foto-knoepfe { width: 100%; }
+  .foto-knoepfe button { flex: 1; padding: 0.85rem 0.5rem; }
 }

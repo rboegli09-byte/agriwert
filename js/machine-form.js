@@ -715,20 +715,40 @@ function schadenHtml(s) {
 // FOTOS
 // ----------------------------------------------------------------------------
 function zeichneFotos(c) {
+  // Zwei getrennte Eingaben:
+  //   - mit capture="environment" -> öffnet direkt die Kamera
+  //   - ohne capture              -> öffnet die Fotomediathek / Dateien
+  // Ein einzelnes Feld MIT capture würde die Mediathek auf dem Handy komplett
+  // verstecken – man könnte dann nur noch live fotografieren.
   c.innerHTML = `
     <div class="foto-upload">
       <label>Kategorie
         <select id="foto-kategorie">${FOTO_KATEGORIEN.map((k) => `<option>${k}</option>`).join('')}</select>
       </label>
-      <input type="file" id="foto-input" accept="image/*" multiple capture="environment">
-      <span id="foto-status" class="mini-hinweis"></span>
+
+      <div class="foto-knoepfe">
+        <button type="button" class="btn-primary" id="foto-kamera-btn">📷 Foto aufnehmen</button>
+        <button type="button" class="btn-sekundaer" id="foto-galerie-btn">🖼️ Aus Fotos wählen</button>
+      </div>
+
+      <input type="file" id="foto-kamera" accept="image/*" capture="environment" hidden>
+      <input type="file" id="foto-datei" accept="image/*" multiple hidden>
     </div>
-    <p class="mini-hinweis">Fotos werden vor dem Hochladen automatisch verkleinert.</p>
+    <p class="mini-hinweis" id="foto-status">Fotos werden vor dem Hochladen automatisch verkleinert.
+      Mehrere Bilder auf einmal auswählen ist möglich.</p>
     <div class="foto-galerie" id="foto-galerie">
       ${ctx.neu ? '' : ctx.daten.fotos.map(fotoHtml).join('')}
     </div>`;
 
-  $('#foto-input', c).addEventListener('change', (e) => handleFotos(e.target.files, c));
+  $('#foto-kamera-btn', c).addEventListener('click', () => $('#foto-kamera', c).click());
+  $('#foto-galerie-btn', c).addEventListener('click', () => $('#foto-datei', c).click());
+
+  ['#foto-kamera', '#foto-datei'].forEach((sel) =>
+    $(sel, c).addEventListener('change', (e) => {
+      handleFotos(e.target.files, c);
+      e.target.value = '';   // damit dasselbe Bild erneut gewählt werden kann
+    })
+  );
 
   $$('.foto-x', c).forEach((b) =>
     b.addEventListener('click', async () => {
