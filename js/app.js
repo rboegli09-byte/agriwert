@@ -167,21 +167,45 @@ function zeigeRegistrierung() {
   });
 }
 
-/** Übersetzt technische Supabase-Fehler in verständliche Sätze. */
+/**
+ * Übersetzt technische Supabase-Fehler in verständliche Sätze.
+ *
+ * Wichtig zum Verständnis: Lehnt unser Datenbank-Trigger eine nicht eingeladene
+ * Adresse ab, antwortet Supabase mit HTTP 500 – und der Fehlertext ist dabei oft
+ * leer ('{}'). Ein 500 an dieser Stelle bedeutet darum fast immer "keine
+ * Einladung". Wir sagen das dem Benutzer, weisen aber auf die andere
+ * Möglichkeit hin, statt eine Ursache zu behaupten, die wir nicht kennen.
+ */
 function registrierFehlerText(error) {
   const m = (error.message || '').toLowerCase();
-  // Der Trigger wirft 'KEINE_EINLADUNG'; Supabase verpackt das als Datenbankfehler.
-  if (m.includes('keine_einladung') || m.includes('database error')) {
-    return 'Für diese E-Mail-Adresse liegt keine Einladung vor. Bitte wende dich an den Administrator.';
-  }
-  if (m.includes('already registered') || m.includes('already been registered')) {
+
+  if (m.includes('already registered') || m.includes('already been registered') ||
+      m.includes('user already exists')) {
     return 'Für diese E-Mail-Adresse gibt es bereits ein Konto. Melde dich stattdessen an.';
   }
-  if (m.includes('signups not allowed') || m.includes('signup is disabled')) {
-    return 'Die Registrierung ist derzeit deaktiviert. Bitte wende dich an den Administrator.';
+  if (m.includes('signups not allowed') || m.includes('signup is disabled') ||
+      m.includes('signups are disabled')) {
+    return 'Die Registrierung ist derzeit ausgeschaltet. Bitte wende dich an den Administrator.';
   }
-  if (m.includes('password')) return 'Das Passwort ist zu kurz oder zu schwach (mind. 8 Zeichen).';
-  return 'Konto konnte nicht erstellt werden: ' + error.message;
+  if (m.includes('password')) {
+    return 'Das Passwort ist zu kurz oder zu schwach (mindestens 8 Zeichen).';
+  }
+  if (m.includes('invalid') && m.includes('email')) {
+    return 'Diese E-Mail-Adresse ist ungültig.';
+  }
+  if (m.includes('rate limit') || m.includes('too many')) {
+    return 'Zu viele Versuche. Bitte warte einen Moment und probiere es nochmal.';
+  }
+
+  // Trigger-Ablehnung: 500 mit leerem oder Datenbank-Fehlertext
+  if (error.status === 500 || m.includes('keine_einladung') || m.includes('database error')) {
+    return 'Für diese E-Mail-Adresse liegt keine Einladung vor. ' +
+           'Bitte prüfe die Schreibweise oder wende dich an den Administrator. ' +
+           '(Falls die Adresse eingeladen wurde, liegt gerade eine Serverstörung vor.)';
+  }
+
+  return 'Konto konnte nicht erstellt werden. Bitte wende dich an den Administrator.' +
+         (error.message && error.message !== '{}' ? ` (${error.message})` : '');
 }
 
 // ============================================================================
