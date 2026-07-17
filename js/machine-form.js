@@ -40,6 +40,7 @@ const ICON_AUGE = svg('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z
 const ICON_EXCEL = svg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="m9 13 6 6"/><path d="m15 13-6 6"/>');
 const ICON_KAMERA = svg('<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/>');
 const ICON_BILDER = svg('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>');
+const ICON_PAPIERKORB = svg('<path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>');
 
 // Modul-eigener Zustand der geöffneten Maschine
 let ctx = null;
@@ -162,6 +163,9 @@ function zeichne() {
             : `<button class="btn-primary" id="bearbeiten-btn" title="Maschine bearbeiten">
                  ${ICON_STIFT}<span>Bearbeiten</span>
                </button>`}
+          <button class="btn-loeschen-icon" id="loeschen-oben" title="Maschine löschen">
+            ${ICON_PAPIERKORB}
+          </button>
         `}
       </div>
 
@@ -196,6 +200,7 @@ function zeichne() {
   });
   $('#excel-btn', ctx.host)?.addEventListener('click', excelExportieren);
   $('#verwerfen-btn', ctx.host)?.addEventListener('click', verwerfeEntwurf);
+  $('#loeschen-oben', ctx.host)?.addEventListener('click', loescheMaschine);
 
   zeichneBewertung();
   if (!ctx.neu) zeichneStatusLeiste();
@@ -636,6 +641,8 @@ function zeichneStammdatenAnsicht(c) {
   };
 
   c.innerHTML = `
+    ${fotoKopfHtml()}
+
     ${ANZEIGE_GRUPPEN.map(([titel, felder]) => {
       const zeilen = felder
         .map(([feld, label, auf]) => [label, wert(feld, auf)])
@@ -663,18 +670,67 @@ function zeichneStammdatenAnsicht(c) {
         : '<p class="mini-hinweis">Keine Ausstattung erfasst.</p>'}
     </section>
 
-    <section class="ansicht-block">
-      <h3>Fotos ${ctx.daten.fotos.length ? `(${ctx.daten.fotos.length})` : ''}</h3>
-      ${ctx.daten.fotos.length
-        ? `<div class="foto-galerie">${ctx.daten.fotos.map((f) => fotoHtml(f, false)).join('')}</div>`
-        : '<p class="mini-hinweis">Keine Fotos vorhanden.</p>'}
-    </section>
-
     <p class="mini-hinweis ansicht-fuss">
       Diese Ansicht dient nur zum Lesen. Zum Ändern oben rechts auf <b>Bearbeiten</b> klicken.
     </p>`;
 
+  bindeFotoKopf(c);
   bindeFotoLightbox(c);
+}
+
+/**
+ * Fotos ganz oben in der Detailansicht: ein grosses Bild, darunter die
+ * übrigen als Streifen zum Umschalten. So sieht man sofort, um welche
+ * Maschine es geht, statt erst scrollen zu müssen.
+ */
+function fotoKopfHtml() {
+  const fotos = ctx.daten.fotos;
+  if (fotos.length === 0) {
+    return `<div class="foto-kopf leer">
+      <span class="mini-hinweis">Noch keine Fotos. Über <b>Bearbeiten</b> → <b>Fotos</b> hinzufügen.</span>
+    </div>`;
+  }
+
+  // Bevorzugt die Vorderseite zeigen – sonst das erste Foto
+  const start = fotos.find((f) => f.kategorie === 'Vorderseite') ?? fotos[0];
+
+  return `
+    <div class="foto-kopf">
+      <figure class="foto-gross">
+        <img id="foto-haupt" src="${fotoUrl(start.storage_path)}"
+             alt="${esc(start.kategorie)}"
+             data-gross="${fotoUrl(start.storage_path)}" data-titel="${esc(start.kategorie)}">
+        <figcaption id="foto-haupt-titel">${esc(start.kategorie)}</figcaption>
+      </figure>
+
+      ${fotos.length > 1 ? `
+        <div class="foto-streifen">
+          ${fotos.map((f) => `
+            <button type="button" class="streifen-bild ${f.id === start.id ? 'aktiv' : ''}"
+                    data-pfad="${fotoUrl(f.storage_path)}" data-kat="${esc(f.kategorie)}"
+                    title="${esc(f.kategorie)}">
+              <img src="${fotoUrl(f.storage_path)}" alt="${esc(f.kategorie)}" loading="lazy">
+            </button>`).join('')}
+        </div>` : ''}
+    </div>`;
+}
+
+function bindeFotoKopf(c) {
+  const haupt = $('#foto-haupt', c);
+  const titel = $('#foto-haupt-titel', c);
+  if (!haupt) return;
+
+  $$('.streifen-bild', c).forEach((b) =>
+    b.addEventListener('click', () => {
+      haupt.src = b.dataset.pfad;
+      haupt.dataset.gross = b.dataset.pfad;
+      haupt.dataset.titel = b.dataset.kat;
+      haupt.alt = b.dataset.kat;
+      titel.textContent = b.dataset.kat;
+      $$('.streifen-bild', c).forEach((x) => x.classList.remove('aktiv'));
+      b.classList.add('aktiv');
+    })
+  );
 }
 
 function textBlock(titel, text) {
@@ -875,27 +931,37 @@ async function loescheMaschine() {
     'Das kann NICHT rückgängig gemacht werden.'
   )) return;
 
-  const knopf = $('#loeschen', ctx.host);
-  if (knopf) { knopf.disabled = true; knopf.textContent = 'Lösche …'; }
+  // Der Knopf kann oben im Kopf ODER unten im Formular sitzen – beide sperren.
+  const knoepfe = [$('#loeschen', ctx.host), $('#loeschen-oben', ctx.host)].filter(Boolean);
+  knoepfe.forEach((k) => { k.disabled = true; });
 
   try {
-    // 1) Bilddateien aus dem Speicher entfernen
+    // 1) Bilddateien aus dem Speicher entfernen. Muss VOR dem Löschen der
+    //    Maschine passieren – danach wüssten wir die Pfade nicht mehr.
     await loescheAlleFotosVonMaschine(ctx.machine.id);
 
     // 2) Maschine löschen – die Datenbank räumt alles Verknüpfte mit weg
-    const { error } = await supabase.from('machines').delete().eq('id', ctx.machine.id);
+    const { error, count } = await supabase.from('machines')
+      .delete({ count: 'exact' }).eq('id', ctx.machine.id);
     if (error) throw error;
+
+    // Kein Fehler, aber auch nichts gelöscht = die Sicherheitsregel hat es
+    // stillschweigend verhindert. Das darf nicht unbemerkt bleiben.
+    if (count === 0) {
+      throw new Error('Die Maschine wurde nicht gelöscht. Das darf nur, wer sie angelegt hat, oder ein Administrator.');
+    }
 
     ctx.onGespeichert?.();
     ctx.onClose();
   } catch (err) {
-    if (knopf) { knopf.disabled = false; knopf.textContent = 'Maschine löschen'; }
+    knoepfe.forEach((k) => { k.disabled = false; });
     const text = err?.message || String(err);
-    $('#stamm-fehler', ctx.host).textContent =
-      'Löschen fehlgeschlagen: ' + text +
-      (/row-level security|not authorized|violates/i.test(text)
-        ? ' – Löschen darf nur, wer die Maschine angelegt hat, oder ein Administrator.'
-        : '');
+    const meldung = 'Löschen fehlgeschlagen: ' + text;
+
+    // Im Bearbeitungsmodus gibt es ein Fehlerfeld, in der Ansicht nicht.
+    const feld = $('#stamm-fehler', ctx.host);
+    if (feld) feld.textContent = meldung;
+    else alert(meldung);
   }
 }
 
