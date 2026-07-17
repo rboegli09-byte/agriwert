@@ -14,6 +14,7 @@
 import { supabase, istKonfiguriert } from './supabase.js';
 import { APP_NAME } from './config.js';
 import { formatPreis, mitStandardwerten } from './pricing.js';
+import { fotoUrl } from './photos.js';
 import { renderMaschine } from './machine-form.js';
 import { renderDashboard } from './dashboard.js';
 import { STATUS, STATUS_REIHENFOLGE, statusMarke } from './status.js';
@@ -27,6 +28,7 @@ const state = {
   kategorien: [],    // Maschinentypen (Traktoren, Heuernte …) – eigene Faktoren möglich
   marken: [],        // Herstellerliste für die Auswahl
   machines: [],      // alle Maschinen
+  vorschaubilder: new Map(),   // machine_id -> ein Foto für die Listenkarte
   tab: 'dashboard',  // aktueller Reiter
   editMachine: null, // Maschine, die gerade bearbeitet wird
 };
@@ -44,6 +46,14 @@ const LOGO_SVG = `
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <path d="M3 20h18"/><path d="M5 20V9l7-5 7 5v11"/><path d="M9 20v-6h6v6"/>
+  </svg>`;
+
+// Platzhalter, wenn eine Maschine noch kein Foto hat
+const ICON_BILD = `
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <rect x="3" y="3" width="18" height="18" rx="2"/>
+    <circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
   </svg>`;
 
 // ============================================================================
@@ -256,6 +266,34 @@ async function ladeMaschinen() {
     .eq('entwurf', false)
     .order('updated_at', { ascending: false });
   state.machines = data ?? [];
+  await ladeVorschaubilder();
+}
+
+/**
+ * Holt für jede Maschine EIN Vorschaubild für die Liste.
+ *
+ * Wir laden alle Foto-Pfade in einer einzigen Abfrage und nehmen je Maschine
+ * das älteste (= das zuerst aufgenommene). Eine Abfrage pro Maschine wäre bei
+ * 50 Maschinen 50 Abfragen – das würde die Liste spürbar langsam machen.
+ *
+ * Bevorzugt wird ein Foto der Kategorie "Vorderseite": das zeigt die Maschine
+ * am besten. Gibt es keines, nehmen wir einfach das erste.
+ */
+async function ladeVorschaubilder() {
+  const { data } = await supabase
+    .from('machine_photos')
+    .select('machine_id, storage_path, kategorie')
+    .order('created_at');
+
+  const bilder = new Map();
+  for (const f of data ?? []) {
+    const vorhanden = bilder.get(f.machine_id);
+    // Erstes Foto nehmen – ausser es kommt später noch eine "Vorderseite"
+    if (!vorhanden || (f.kategorie === 'Vorderseite' && vorhanden.kategorie !== 'Vorderseite')) {
+      bilder.set(f.machine_id, f);
+    }
+  }
+  state.vorschaubilder = bilder;
 }
 
 /**
@@ -554,8 +592,16 @@ function zeigeErgebnisse() {
 function kartenHtml(m) {
   const titel = [m.hersteller || m.marke, m.modell].filter(Boolean).join(' ') || 'Ohne Namen';
   const marktwert = m.marktwert ?? m.berechneter_preis;
+  const bild = state.vorschaubilder?.get(m.id);
+
   return `
-    <div class="karte" data-open="${m.id}">
+    <div class="karte ${bild ? 'mit-bild' : ''}" data-open="${m.id}">
+      ${bild
+        ? `<div class="karte-bild">
+             <img src="${fotoUrl(bild.storage_path)}" alt="${esc(titel)}" loading="lazy">
+             ${m.status === 'verkauft' ? '<span class="karte-bild-band">Verkauft</span>' : ''}
+           </div>`
+        : '<div class="karte-bild leer-bild" title="Noch kein Foto">' + ICON_BILD + '</div>'}
       <div class="karte-oben">
         <span class="ampel ${ampelKlasse(m.zustand_gesamt)}"></span>
         <strong>${esc(titel)}</strong>

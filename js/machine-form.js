@@ -1340,6 +1340,7 @@ function bindeGalerieAktionen(c) {
       try {
         await loescheFoto(foto);
         ctx.daten.fotos = ctx.daten.fotos.filter((f) => f.id !== foto.id);
+        ctx.onGespeichert?.();     // Vorschaubild der Liste nachführen
         zeichne();
       } catch (err) {
         $('#foto-status', c).textContent = 'Foto konnte nicht gelöscht werden: ' + (err.message || err);
@@ -1405,6 +1406,8 @@ async function handleFotos(fileList, c) {
       if (error) throw error;
       if (data) ctx.daten.fotos.push(data);
     }
+    // Damit das Vorschaubild auf der Listenkarte sofort erscheint
+    ctx.onGespeichert?.();
     zeichne();
   } catch (err) {
     status.textContent = 'Fehler beim Hochladen: ' + (err.message || err);
