@@ -41,6 +41,7 @@ const ICON_EXCEL = svg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0
 const ICON_KAMERA = svg('<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/>');
 const ICON_BILDER = svg('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>');
 const ICON_PAPIERKORB = svg('<path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>');
+const ICON_SPEICHER = svg('<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>');
 
 // Modul-eigener Zustand der geöffneten Maschine
 let ctx = null;
@@ -579,10 +580,10 @@ function zeichneStammdaten(c) {
       </fieldset>
 
       <div class="formular-aktionen">
-        <button type="submit" class="btn-primary btn-gross">${ctx.neu ? 'Maschine anlegen' : 'Speichern'}</button>
         ${ctx.neu
-          ? '<button type="button" id="verwerfen2" class="btn-klein">Abbrechen</button>'
-          : '<button type="button" id="loeschen" class="btn-danger">Maschine löschen</button>'}
+          ? `<button type="submit" class="btn-primary btn-gross">Maschine anlegen</button>
+             <button type="button" id="verwerfen2" class="btn-klein">Abbrechen</button>`
+          : `<span class="auto-hinweis">${ICON_SPEICHER} Änderungen werden automatisch gespeichert</span>`}
         <span class="fehler" id="stamm-fehler"></span>
         <span class="ok" id="stamm-ok"></span>
       </div>
@@ -590,11 +591,14 @@ function zeichneStammdaten(c) {
 
   const form = $('#stamm-form', c);
 
-  // Eingaben live in den Entwurf übernehmen -> Bewertungs-Panel rechnet mit
+  // Bei jedem Tastendruck: Eingabe merken, Preis live nachrechnen UND
+  // automatisch speichern (leicht verzögert, damit nicht jeder Buchstabe eine
+  // eigene Anfrage auslöst – das würde die Verbindung überlasten).
   form.addEventListener('input', () => {
     Object.assign(ctx.entwurf, stammdatenAusFormular(form));
     zeigeKategorieHinweis(c);
     zeichneBewertung();
+    autoSpeichereStammdaten();
   });
   form.addEventListener('change', (e) => {
     Object.assign(ctx.entwurf, stammdatenAusFormular(form));
@@ -607,6 +611,7 @@ function zeichneStammdaten(c) {
     }
     zeigeKategorieHinweis(c);
     zeichneBewertung();
+    autoSpeichereStammdaten();
   });
   zeigeKategorieHinweis(c);
 
@@ -816,6 +821,44 @@ function stammdatenAusFormular(form) {
       ? { zustand_gesamt: zuGanzzahl(form.elements['zustand_gesamt'].value) } : {}),
   };
 }
+
+/**
+ * Speichert die Stammdaten automatisch, kurz nachdem man aufhört zu tippen.
+ * So braucht es keinen „Speichern"-Knopf mehr. Ein Entwurf bleibt dabei
+ * Entwurf (unsichtbar in der Liste) – sichtbar wird er erst mit „Maschine
+ * anlegen".
+ */
+const autoSpeichereStammdaten = entprellen(async () => {
+  const form = $('#stamm-form', ctx.host);
+  if (!form || !ctx.machine?.id) return;
+
+  const daten = { ...stammdatenAusFormular(form), ...bewertungsFelder() };
+  const ok = $('#stamm-ok', ctx.host);
+  const fehler = $('#stamm-fehler', ctx.host);
+
+  try {
+    await merkeNeueMarke(daten.hersteller);
+    const { data, error } = await supabase.from('machines')
+      .update(daten)
+      .eq('id', ctx.machine.id)
+      .eq('version', ctx.machine.version)
+      .select();
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      // Jemand anders hat zwischenzeitlich gespeichert.
+      if (fehler) fehler.textContent = 'Konflikt – jemand hat die Maschine geändert. Bitte neu öffnen.';
+      return;
+    }
+
+    ctx.machine = data[0];              // neue Version übernehmen
+    ctx.onGespeichert?.();
+    if (fehler) fehler.textContent = '';
+    if (ok) { ok.textContent = 'Gespeichert ✓'; setTimeout(() => (ok.textContent = ''), 1500); }
+  } catch (err) {
+    if (fehler) fehler.textContent = 'Nicht gespeichert: ' + (err.message || err);
+  }
+}, 700);
 
 async function speichereStammdaten(form) {
   const fehler = $('#stamm-fehler', ctx.host);
@@ -1085,14 +1128,46 @@ function zeichneBaugruppen(c) {
     <p class="mini-hinweis">Note 1 = unbrauchbar, 10 = neuwertig. Die Noten ergeben
       technischen und optischen Zustand sowie den Zustandsindex.
       <b>Lack, Karosserie und Kabine</b> zählen zum optischen Zustand, alles andere zum technischen.
-      Änderungen werden automatisch gespeichert.</p>
+      Du kannst Baugruppen umbenennen, löschen und eigene hinzufügen.
+      Alles wird automatisch gespeichert.</p>
     <div class="baugruppen">
       ${ctx.daten.baugruppen.map(baugruppeHtml).join('')}
-    </div>`;
+    </div>
+    <button type="button" class="btn-sekundaer" id="bg-hinzufuegen">+ Baugruppe hinzufügen</button>`;
+
+  $('#bg-hinzufuegen', c).addEventListener('click', baugruppeHinzufuegen);
 
   $$('.baugruppe', c).forEach((el) => {
     const id = el.dataset.id;
     const bg = ctx.daten.baugruppen.find((b) => b.id === id);
+
+    // Name umbenennen
+    const nameEl = $('.bg-name', el);
+    nameEl.addEventListener('input', entprellen(async () => {
+      const neu = nameEl.value.trim();
+      if (!neu || neu === bg.name) return;
+      const alt = bg.name;
+      bg.name = neu;
+      const { error } = await supabase.from('baugruppen')
+        .update({ name: neu }).eq('id', bg.id);
+      if (error) {
+        bg.name = alt;
+        nameEl.value = alt;
+        alert(error.code === '23505'
+          ? `Es gibt schon eine Baugruppe „${neu}".`
+          : 'Umbenennen fehlgeschlagen: ' + error.message);
+      }
+    }, 500));
+
+    // Baugruppe löschen
+    $('.bg-loeschen', el).addEventListener('click', async () => {
+      if (!confirm(`Baugruppe „${bg.name}" von dieser Maschine entfernen?`)) return;
+      const { error } = await supabase.from('baugruppen').delete().eq('id', bg.id);
+      if (error) { alert('Löschen fehlgeschlagen: ' + error.message); return; }
+      ctx.daten.baugruppen = ctx.daten.baugruppen.filter((x) => x.id !== bg.id);
+      await speichereFelder(bewertungsFelder());
+      zeichne();
+    });
 
     const noteEl = $('.bg-note', el);
     noteEl.addEventListener('input', () => {
@@ -1133,8 +1208,9 @@ function baugruppeHtml(b) {
     <div class="baugruppe" data-id="${b.id}">
       <div class="bg-kopf">
         <span class="ampel ${ampel}"></span>
-        <strong>${esc(b.name)}</strong>
+        <input type="text" class="bg-name" value="${esc(b.name)}" aria-label="Name der Baugruppe">
         <span class="bg-note-anzeige"><b class="bg-note-wert">${b.note ?? 5}</b>/10</span>
+        <button type="button" class="btn-x bg-loeschen" title="Baugruppe entfernen">×</button>
       </div>
       <input type="range" class="bg-note" min="1" max="10" value="${b.note ?? 5}">
       <div class="bg-felder">
@@ -1163,6 +1239,27 @@ async function speichereBaugruppe(bg) {
   }).eq('id', bg.id);
   // Bewertung der Maschine nachführen, damit die Liste stimmt
   await speichereFelder(bewertungsFelder());
+}
+
+/** Eine eigene Baugruppe zu dieser Maschine hinzufügen. */
+async function baugruppeHinzufuegen() {
+  const name = prompt('Name der neuen Baugruppe (z. B. Frontlader):');
+  if (!name || !name.trim()) return;
+
+  const maxSort = ctx.daten.baugruppen.reduce((m, b) => Math.max(m, b.sortierung ?? 0), 0);
+  const { data, error } = await supabase.from('baugruppen').insert({
+    machine_id: ctx.machine.id, name: name.trim(), note: 5, sortierung: maxSort + 1,
+  }).select().single();
+
+  if (error) {
+    alert(error.code === '23505'
+      ? `Es gibt schon eine Baugruppe „${name.trim()}".`
+      : 'Hinzufügen fehlgeschlagen: ' + error.message);
+    return;
+  }
+  ctx.daten.baugruppen.push(data);
+  await speichereFelder(bewertungsFelder());
+  zeichne();
 }
 
 // ----------------------------------------------------------------------------

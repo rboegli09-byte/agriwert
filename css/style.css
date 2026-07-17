@@ -288,6 +288,11 @@ input[type="range"] { padding: 0; accent-color: var(--akzent); }
 .warnung { color: var(--mittel); font-size: 0.85rem; }
 
 .formular-aktionen { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.auto-hinweis {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  color: var(--text-schwach); font-size: 0.85rem;
+}
+.auto-hinweis .icon { width: 15px; height: 15px; }
 .formular-aktionen .btn-gross { width: auto; min-width: 150px; }
 
 /* --- Fotos ----------------------------------------------------------------- */
@@ -400,8 +405,15 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
   border: 1px solid var(--rahmen); border-radius: var(--radius); padding: 0.8rem;
 }
 .bg-kopf { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem; }
-.bg-note-anzeige { margin-left: auto; color: var(--text-schwach); font-size: 0.85rem; }
+.bg-name {
+  flex: 1; min-width: 0; margin: 0; font-weight: 600;
+  border: 1px solid transparent; background: transparent; padding: 0.3rem 0.4rem;
+}
+.bg-name:hover { border-color: var(--rahmen); }
+.bg-name:focus { border-color: var(--akzent); background: var(--feld); }
+.bg-note-anzeige { color: var(--text-schwach); font-size: 0.85rem; white-space: nowrap; }
 .bg-note-anzeige b { color: var(--text); font-size: 1rem; }
+.bg-loeschen { flex-shrink: 0; }
 .bg-felder { display: grid; grid-template-columns: 1fr 1fr; gap: 0 0.7rem; margin-top: 0.6rem; }
 .bg-felder label { margin-bottom: 0.5rem; font-size: 0.75rem; }
 .bg-rep-check { align-self: end; margin-bottom: 0.9rem; }
