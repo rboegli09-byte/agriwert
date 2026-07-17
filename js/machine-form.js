@@ -1039,12 +1039,15 @@ function zeichneBaugruppen(c) {
         <tbody>
           ${ctx.daten.baugruppen.map((b) => `
             <tr>
-              <td><span class="ampel ${b.note >= 8 ? 'gruen' : b.note >= 5 ? 'gelb' : 'rot'}"></span></td>
-              <td><b>${esc(b.name)}</b></td>
-              <td class="note-zelle">${b.note ?? '–'}/10</td>
-              <td>${esc(b.bemerkungen || '–')}</td>
-              <td>${esc(b.schaeden || '–')}</td>
-              <td class="zahl">${b.reparaturbedarf
+              <td class="nur-breit"><span class="ampel ${b.note >= 8 ? 'gruen' : b.note >= 5 ? 'gelb' : 'rot'}"></span></td>
+              <td data-label="Baugruppe" class="haupt-zelle">
+                <span class="ampel nur-schmal ${b.note >= 8 ? 'gruen' : b.note >= 5 ? 'gelb' : 'rot'}"></span>
+                <b>${esc(b.name)}</b>
+              </td>
+              <td data-label="Note" class="note-zelle">${b.note ?? '–'}/10</td>
+              <td data-label="Bemerkungen">${esc(b.bemerkungen || '–')}</td>
+              <td data-label="Schäden">${esc(b.schaeden || '–')}</td>
+              <td data-label="Reparatur" class="zahl">${b.reparaturbedarf
                 ? `<b class="warn-text">${formatPreis(b.reparaturkosten ?? 0, 'CHF')}</b>` : '–'}</td>
             </tr>`).join('')}
         </tbody>
@@ -1149,14 +1152,14 @@ function zeichneReifen(c) {
           <tbody>
             ${ctx.daten.reifen.map((r) => `
               <tr>
-                <td><b>${esc(r.position)}</b></td>
-                <td>${esc(r.hersteller || '–')}</td>
-                <td>${esc(r.dimension || '–')}</td>
-                <td>${esc(r.profil || '–')}</td>
-                <td>${r.verschleiss != null ? r.verschleiss + ' %' : '–'}</td>
-                <td>${r.alter_jahre != null ? r.alter_jahre + ' J.' : '–'}</td>
-                <td>${r.zustand != null ? r.zustand + '/10' : '–'}</td>
-                <td>${esc(r.schaeden || '–')}</td>
+                <td data-label="Position" class="haupt-zelle"><b>${esc(r.position)}</b></td>
+                <td data-label="Hersteller">${esc(r.hersteller || '–')}</td>
+                <td data-label="Dimension">${esc(r.dimension || '–')}</td>
+                <td data-label="Profil">${esc(r.profil || '–')}</td>
+                <td data-label="Verschleiss">${r.verschleiss != null ? r.verschleiss + ' %' : '–'}</td>
+                <td data-label="Alter">${r.alter_jahre != null ? r.alter_jahre + ' J.' : '–'}</td>
+                <td data-label="Zustand">${r.zustand != null ? r.zustand + '/10' : '–'}</td>
+                <td data-label="Schäden">${esc(r.schaeden || '–')}</td>
               </tr>`).join('')}
           </tbody>
         </table>`;
@@ -1545,11 +1548,14 @@ function zeichneAufgaben(c) {
         <tbody>
           ${ctx.daten.aufgaben.map((a) => `
             <tr class="${a.erledigt ? 'erledigt' : ''}">
-              <td><input type="checkbox" class="auf-check" data-id="${a.id}" ${a.erledigt ? 'checked' : ''}></td>
-              <td>${esc(a.titel)}</td>
-              <td>${a.zugewiesen_an ? esc(benutzerName(a.zugewiesen_an)) : '<small>–</small>'}</td>
-              <td>${a.faellig_am ? `<small class="${!a.erledigt && new Date(a.faellig_am) < new Date() ? 'ueberfaellig' : ''}">${datum(a.faellig_am)}</small>` : '<small>–</small>'}</td>
-              <td><button type="button" class="btn-x auf-x" data-id="${a.id}">×</button></td>
+              <td class="haupt-zelle">
+                <input type="checkbox" class="auf-check" data-id="${a.id}" ${a.erledigt ? 'checked' : ''}>
+                <span class="nur-schmal">${esc(a.titel)}</span>
+              </td>
+              <td class="nur-breit">${esc(a.titel)}</td>
+              <td data-label="Zugewiesen">${a.zugewiesen_an ? esc(benutzerName(a.zugewiesen_an)) : '<small>–</small>'}</td>
+              <td data-label="Fällig">${a.faellig_am ? `<small class="${!a.erledigt && new Date(a.faellig_am) < new Date() ? 'ueberfaellig' : ''}">${datum(a.faellig_am)}</small>` : '<small>–</small>'}</td>
+              <td class="zeile-loeschen"><button type="button" class="btn-x auf-x" data-id="${a.id}">×</button></td>
             </tr>`).join('')}
         </tbody>
       </table>`}`;
@@ -1743,13 +1749,13 @@ function zeichneVerlauf(c) {
         <tbody>
           ${ctx.daten.verlauf.map((v) => `
             <tr>
-              <td><small>${datumZeit(v.created_at)}</small></td>
-              <td><small>${esc(benutzerName(v.benutzer))}</small></td>
-              <td>${v.aktion === 'INSERT' ? '<b>angelegt</b>'
+              <td data-label="Wann" class="haupt-zelle"><small>${datumZeit(v.created_at)}</small></td>
+              <td data-label="Wer"><small>${esc(benutzerName(v.benutzer))}</small></td>
+              <td data-label="Was">${v.aktion === 'INSERT' ? '<b>angelegt</b>'
                   : v.aktion === 'DELETE' ? '<b>gelöscht</b>'
                   : esc(v.feld || '')}</td>
-              <td><small>${esc(kuerze(v.alt_wert))}</small></td>
-              <td><small>${esc(kuerze(v.neu_wert))}</small></td>
+              <td data-label="Von"><small>${esc(kuerze(v.alt_wert))}</small></td>
+              <td data-label="Auf"><small>${esc(kuerze(v.neu_wert))}</small></td>
             </tr>`).join('')}
         </tbody>
       </table>`}`;

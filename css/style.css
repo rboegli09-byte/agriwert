@@ -56,6 +56,18 @@
 
 * { box-sizing: border-box; }
 
+/* Die Seite darf sich NIE seitwärts schieben lassen – auf dem Handy ist das
+   das Erste, was auffällt und stört. Breite Inhalte scrollen in ihrem
+   eigenen Kasten (siehe .untertabs, .foto-streifen). */
+html, body { overflow-x: hidden; max-width: 100%; }
+
+/* Nur auf schmalen Bildschirmen sichtbar bzw. nur auf breiten */
+.nur-schmal { display: none; }
+@media (max-width: 700px) {
+  .nur-schmal { display: inline-flex; }
+  .nur-breit { display: none !important; }
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -792,10 +804,66 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
   .kat-zeile .kat-x { grid-column: 2; grid-row: 1; }
   .kat-zeile input:not([data-feld="name"]) { grid-column: 1 / -1; }
 
+  /* --- Tabellen werden zu Karten -------------------------------------------
+     Eine Tabelle mit 6 Spalten ist auf 375 px unlesbar und schiebt die ganze
+     Seite zur Seite. Darum: Kopfzeile weg, jede Zeile wird eine Karte, und
+     die Spaltenüberschrift steht per data-label vor dem Wert. */
+  .tabelle { border: none; background: none; }
+  .tabelle thead { display: none; }
+  .tabelle, .tabelle tbody, .tabelle tr, .tabelle td { display: block; width: 100%; }
+  .tabelle tr {
+    background: var(--karte); border: 1px solid var(--rahmen);
+    border-radius: var(--radius); margin-bottom: 0.6rem; padding: 0.7rem 0.9rem;
+  }
+  .tabelle tr:last-child { margin-bottom: 0; }
+  .tabelle td {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+    border: none; padding: 0.3rem 0; text-align: right;
+  }
+  .tabelle td::before {
+    content: attr(data-label);
+    color: var(--text-schwach); font-size: 0.88rem;
+    text-align: left; flex-shrink: 0;
+  }
+  .tabelle td:not([data-label]) { justify-content: flex-start; }
+  .tabelle td:not([data-label])::before { content: none; }
+  /* Erste Zelle ist die Überschrift der Karte */
+  .tabelle td.haupt-zelle {
+    display: flex; align-items: center; gap: 0.5rem; text-align: left;
+    font-size: 1.05rem; padding-bottom: 0.5rem; margin-bottom: 0.3rem;
+    border-bottom: 1px solid var(--rahmen);
+  }
+  .tabelle td.haupt-zelle::before { content: none; }
+  .tabelle .zeile-loeschen { justify-content: flex-end; padding-top: 0.5rem; }
+  .tabelle td .ampel { flex-shrink: 0; }
+  .tabelle select { width: auto; max-width: 60%; }
+  .tabelle tr.erledigt td { text-decoration: none; }
+  .tabelle tr.erledigt td.haupt-zelle { text-decoration: line-through; }
+
   /* Foto-Kopf */
   .foto-kopf { margin: -1.1rem -1.1rem 1.2rem; }
   .foto-gross img { max-height: 260px; }
   .foto-streifen { padding: 0.5rem 1.1rem; }
+
+  /* Detailansicht: Werkzeuge über die volle Breite, gut treffbar */
+  .detail-kopf { flex-direction: column; gap: 0.8rem; }
+  .detail-werkzeuge { width: 100%; }
+  .detail-werkzeuge button { flex: 1; justify-content: center; padding: 0.7rem 0.6rem; }
+  .btn-loeschen-icon { flex: 0 0 auto !important; }
+
+  /* Status-Leiste untereinander statt gequetscht */
+  .status-leiste { flex-direction: column; align-items: stretch; }
+  .status-schritte { justify-content: space-between; }
+  .status-schritte li { font-size: 0.75rem; padding-right: 0.8rem; }
+  .status-schritte li:not(:last-child)::after { right: 0.2rem; width: 0.4rem; }
+  .status-aktion button { width: 100%; }
+  .freigabe-kasten button { width: 100%; padding: 0.8rem; }
+
+  /* Kennzahlen kompakter */
+  .kennzahl b { font-size: 1.15rem; }
+
+  /* Datenliste: Beschriftung und Wert untereinander lesbarer */
+  .datenliste { grid-template-columns: 1fr; }
 
   /* Fotos: unterwegs grosse Klickflächen, Knöpfe über die volle Breite */
   .foto-upload { align-items: stretch; }

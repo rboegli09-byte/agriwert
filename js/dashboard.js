@@ -109,11 +109,11 @@ export async function renderDashboard(c, state) {
           <tbody>
             ${[...m].sort((a, b) => preis(b) - preis(a)).slice(0, 8).map((x) => `
               <tr data-open="${x.id}" class="klickbar">
-                <td>${esc([x.hersteller || x.marke, x.modell].filter(Boolean).join(' ') || 'Ohne Namen')}</td>
-                <td>${x.baujahr ?? '–'}</td>
-                <td>${x.betriebsstunden != null ? x.betriebsstunden.toLocaleString('de-CH') : '–'}</td>
-                <td>${x.zustandsindex ?? '–'}</td>
-                <td class="zahl">${formatPreis(preis(x), w)}</td>
+                <td class="haupt-zelle">${esc([x.hersteller || x.marke, x.modell].filter(Boolean).join(' ') || 'Ohne Namen')}</td>
+                <td data-label="Baujahr">${x.baujahr ?? '–'}</td>
+                <td data-label="Stunden">${x.betriebsstunden != null ? x.betriebsstunden.toLocaleString('de-CH') : '–'}</td>
+                <td data-label="Index">${x.zustandsindex ?? '–'}</td>
+                <td data-label="Marktwert" class="zahl">${formatPreis(preis(x), w)}</td>
               </tr>`).join('')}
           </tbody>
         </table>

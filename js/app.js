@@ -943,9 +943,9 @@ async function renderBenutzer() {
           <tbody>
             ${einladungen.map((e) => `
               <tr>
-                <td>${esc(e.email)}</td>
-                <td>${esc(e.rolle)}</td>
-                <td><small>${new Date(e.created_at).toLocaleDateString('de-CH')}</small></td>
+                <td data-label="E-Mail" class="haupt-zelle">${esc(e.email)}</td>
+                <td data-label="Rolle">${esc(e.rolle)}</td>
+                <td data-label="Eingeladen am"><small>${new Date(e.created_at).toLocaleDateString('de-CH')}</small></td>
                 <td><button class="btn-klein" data-einladung="${e.id}">zurückziehen</button></td>
               </tr>`).join('')}
           </tbody>
@@ -957,8 +957,8 @@ async function renderBenutzer() {
       <tbody>
         ${(profile ?? []).map((p) => `
           <tr>
-            <td>${esc(p.full_name || p.email)}<br><small>${esc(p.email || '')}</small></td>
-            <td>
+            <td class="haupt-zelle">${esc(p.full_name || p.email)}<br><small>${esc(p.email || '')}</small></td>
+            <td data-label="Rolle">
               <select data-user="${p.id}" ${p.id === state.user.id ? 'disabled title="Die eigene Rolle kann nicht geändert werden"' : ''}>
                 ${ROLLEN.map((r) => `<option value="${r}" ${p.role === r ? 'selected' : ''}>${r}</option>`).join('')}
               </select>
