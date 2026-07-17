@@ -519,17 +519,38 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
 .ampel-legende b { color: var(--text); }
 
 /* --- Kategorien-Verwaltung ------------------------------------------------- */
-.kat-kopf, .kat-zeile {
-  display: grid; grid-template-columns: 1fr 90px 90px 110px 34px;
-  gap: 0.4rem; align-items: center;
+.kat-karte {
+  border: 1px solid var(--rahmen); border-radius: var(--radius);
+  padding: 0.9rem 1rem; margin-bottom: 0.7rem;
 }
-.kat-kopf {
-  font-size: 0.7rem; color: var(--text-schwach); text-transform: uppercase;
-  letter-spacing: 0.04em; margin-bottom: 0.35rem;
+.kat-karte-kopf { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.kat-name { margin: 0; flex: 1; min-width: 140px; font-weight: 600; }
+.kat-motor { margin: 0; display: flex; align-items: center; gap: 0.4rem; }
+.kat-motor input { width: auto; margin: 0; accent-color: var(--akzent); }
+.kat-motor span { color: var(--text); font-size: 0.9rem; }
+.kat-karte-kopf .kat-x { margin-left: auto; }
+.kat-faktoren { margin-bottom: 0.5rem; }
+.kat-faktoren label { margin-bottom: 0.5rem; font-size: 0.8rem; }
+.kat-faktoren input { margin: 0; }
+.kat-faktoren input::placeholder { font-style: italic; opacity: 0.6; }
+
+.kat-baugruppen { border-top: 1px solid var(--rahmen); padding-top: 0.6rem; }
+.kat-bg-titel {
+  font-size: 0.72rem; color: var(--text-schwach); text-transform: uppercase;
+  letter-spacing: 0.04em; display: block; margin-bottom: 0.4rem;
 }
-.kat-zeile { margin-bottom: 0.4rem; }
-.kat-zeile input { margin: 0; }
-.kat-zeile input::placeholder { font-style: italic; opacity: 0.6; }
+.bg-wolke { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.bg-chip {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  background: var(--bg); border: 1px solid var(--rahmen-stark);
+  border-radius: 999px; padding: 0.15rem 0.3rem 0.15rem 0.65rem; font-size: 0.82rem;
+}
+.bg-chip button {
+  background: none; color: var(--text-schwach); border: none;
+  width: 18px; height: 18px; border-radius: 50%; line-height: 1; font-size: 0.85rem;
+}
+.bg-chip button:hover { background: var(--schlecht); color: #fff; }
+.bg-add { border: 1px dashed var(--rahmen-stark); border-radius: 999px; }
 
 /* Marken als Chips */
 .marken-wolke { display: flex; flex-wrap: wrap; gap: 0.35rem; }
@@ -796,16 +817,8 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
   .balken-zeile { grid-template-columns: 80px 1fr; }
   .balken-wert { grid-column: 2; }
 
-  /* Kategorien-Verwaltung: Kopfzeile weg, Zeilen untereinander */
-  .kat-kopf { display: none; }
-  .kat-zeile {
-    grid-template-columns: 1fr 34px;
-    border: 1px solid var(--rahmen); border-radius: var(--radius);
-    padding: 0.6rem; margin-bottom: 0.6rem;
-  }
-  .kat-zeile input[data-feld="name"] { grid-column: 1; }
-  .kat-zeile .kat-x { grid-column: 2; grid-row: 1; }
-  .kat-zeile input:not([data-feld="name"]) { grid-column: 1 / -1; }
+  /* Kategorie-Karten: Faktoren untereinander */
+  .kat-faktoren { grid-template-columns: 1fr; }
 
   /* --- Tabellen werden zu Karten -------------------------------------------
      Eine Tabelle mit 6 Spalten ist auf 375 px unlesbar und schiebt die ganze

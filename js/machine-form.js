@@ -410,6 +410,20 @@ function aktuelleKategorie() {
   return (ctx.state.kategorien ?? []).find((k) => k.id === id) ?? null;
 }
 
+/**
+ * Kategorie gewechselt: sofort speichern, damit die Datenbank die Baugruppen
+ * der neuen Kategorie ergänzt. Danach alles neu laden und zeichnen, damit die
+ * richtigen Felder und Baugruppen erscheinen.
+ */
+async function kategorieGewechselt() {
+  const neueId = ctx.entwurf.kategorie_id ?? null;
+  const ok = await speichereFelder({ kategorie_id: neueId, ...bewertungsFelder() });
+  if (!ok) return;                 // Konflikt wurde in speichereFelder behandelt
+  delete ctx.entwurf.kategorie_id;
+  await ladeDetails();             // Baugruppen der neuen Kategorie laden
+  zeichne();
+}
+
 // ============================================================================
 // Bewertungs-Panel (immer sichtbar, rechnet live mit)
 // ============================================================================
@@ -489,6 +503,10 @@ function zeichneStammdaten(c) {
   const kategorien = ctx.state.kategorien ?? [];
   const marken = ctx.state.marken ?? [];
 
+  // Anbaugeräte/Anhänger (hat_motor = false) haben keine Motor-Angaben.
+  // Ohne gewählte Kategorie behandeln wir die Maschine als motorisiert.
+  const hatMotor = aktuelleKategorie()?.hat_motor !== false;
+
   c.innerHTML = `
     <form id="stamm-form">
       <fieldset><legend>Einordnung</legend>
@@ -527,18 +545,19 @@ function zeichneStammdaten(c) {
           ${f('baujahr', 'Baujahr', 'number')}
           ${f('erstzulassung', 'Erstzulassung', 'date')}
           ${f('betriebsstunden', 'Betriebsstunden', 'number')}
-          ${f('motorstunden', 'Motorstunden', 'number')}
+          ${hatMotor ? f('motorstunden', 'Motorstunden', 'number') : ''}
         </div>
       </fieldset>
 
       <fieldset><legend>Technik</legend>
         <div class="grid">
-          ${f('motorleistung', 'Motorleistung (PS)', 'number')}
-          ${f('hubraum', 'Hubraum (cm³)', 'number')}
-          ${f('zylinder', 'Zylinder', 'number')}
+          ${hatMotor ? f('motorleistung', 'Motorleistung (PS)', 'number') : ''}
+          ${hatMotor ? f('hubraum', 'Hubraum (cm³)', 'number') : ''}
+          ${hatMotor ? f('zylinder', 'Zylinder', 'number') : ''}
           ${f('gewicht', 'Gewicht (kg)', 'number')}
-          ${f('steuerventile', 'Anzahl Steuerventile', 'number')}
+          ${hatMotor ? f('steuerventile', 'Anzahl Steuerventile', 'number') : ''}
         </div>
+        ${hatMotor ? '' : '<p class="mini-hinweis">Diese Kategorie hat keinen eigenen Motor – Motor-Felder sind ausgeblendet.</p>'}
       </fieldset>
 
       <fieldset><legend>Zuordnung</legend>
@@ -577,8 +596,15 @@ function zeichneStammdaten(c) {
     zeigeKategorieHinweis(c);
     zeichneBewertung();
   });
-  form.addEventListener('change', () => {
+  form.addEventListener('change', (e) => {
     Object.assign(ctx.entwurf, stammdatenAusFormular(form));
+    // Kategoriewechsel ändert, welche Felder gezeigt werden -> Formular neu
+    // zeichnen. Die eingegebenen Werte stehen im Entwurf und werden wieder
+    // eingesetzt. Ausserdem die Baugruppen der neuen Kategorie nachladen.
+    if (e.target.name === 'kategorie_id') {
+      kategorieGewechselt();
+      return;
+    }
     zeigeKategorieHinweis(c);
     zeichneBewertung();
   });

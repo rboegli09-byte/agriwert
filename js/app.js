@@ -308,10 +308,17 @@ async function ladeVorschaubilder() {
  * "Maschine anlegen" richtig angelegt wird.
  */
 async function neueMaschine() {
+  // Zuerst die Kategorie wählen – erst dann bekommt die Maschine die richtigen
+  // Baugruppen. Ohne diesen Schritt würde die Datenbank die Standard-Liste
+  // erzeugen, bevor überhaupt klar ist, was für eine Maschine es wird.
+  const kategorieId = await waehleKategorie();
+  if (kategorieId === undefined) return;   // abgebrochen
+
   const { data, error } = await supabase.from('machines').insert({
     created_by: state.user.id,
     entwurf: true,
     zustand_gesamt: 5,
+    kategorie_id: kategorieId,   // kann null sein (= ohne Kategorie)
   }).select().single();
 
   if (error) {
@@ -321,6 +328,43 @@ async function neueMaschine() {
   state.editMachine = data;
   state.tab = 'bearbeiten';
   render();
+}
+
+/**
+ * Kleiner Dialog zur Kategoriewahl beim Anlegen.
+ * @returns {Promise<string|null|undefined>} Kategorie-ID, null (ohne), oder
+ *          undefined wenn abgebrochen.
+ */
+function waehleKategorie() {
+  return new Promise((fertig) => {
+    const box = document.createElement('div');
+    box.className = 'dialog-hinter';
+    box.innerHTML = `
+      <form class="dialog" id="kat-wahl">
+        <h3>Was für eine Maschine?</h3>
+        <p class="mini-hinweis">Die Kategorie bestimmt, welche Baugruppen und Felder
+          erfasst werden. Sie lässt sich später ändern.</p>
+        <label>Kategorie
+          <select id="kw-select" autofocus>
+            ${state.kategorien.map((k) => `<option value="${k.id}">${esc(k.name)}</option>`).join('')}
+            <option value="">– ohne Kategorie –</option>
+          </select>
+        </label>
+        <div class="dialog-aktionen">
+          <button type="submit" class="btn-primary">Weiter</button>
+          <button type="button" class="btn-klein" id="kw-abbrechen">Abbrechen</button>
+        </div>
+      </form>`;
+    document.body.appendChild(box);
+
+    const schliessen = (wert) => { box.remove(); fertig(wert); };
+    box.querySelector('#kw-abbrechen').addEventListener('click', () => schliessen(undefined));
+    box.addEventListener('click', (e) => { if (e.target === box) schliessen(undefined); });
+    box.querySelector('#kat-wahl').addEventListener('submit', (e) => {
+      e.preventDefault();
+      schliessen(box.querySelector('#kw-select').value || null);
+    });
+  });
 }
 
 // Echtzeit: sobald jemand eine Maschine ändert, neu laden
@@ -720,14 +764,11 @@ function renderEinstellungen() {
 
     <div class="formular" style="margin-top:1rem">
       <h2>Kategorien</h2>
-      <p class="mini-hinweis">Maschinentypen für die Einordnung. Die Faktoren gelten
-        nur für diese Kategorie und übersteuern die allgemeinen oben.
-        <b>Leer lassen = allgemeinen Wert verwenden.</b>
-        Beispiel: Heuernte verliert schneller an Wert als ein Traktor.</p>
+      <p class="mini-hinweis">Jede Kategorie hat eigene Baugruppen und Preis-Faktoren.
+        Die Faktoren übersteuern die allgemeinen oben – <b>leer lassen = allgemeinen Wert
+        verwenden</b>. Das Häkchen „hat eigenen Motor" blendet bei Anbaugeräten die
+        Motor-Felder aus. Änderungen wirken auf <b>neu erfasste</b> Maschinen.</p>
 
-      <div class="kat-kopf">
-        <span>Name</span><span>% / Jahr</span><span>% / 100 h</span><span>Min. Restwert %</span><span></span>
-      </div>
       <div id="kat-liste"></div>
       <button type="button" class="btn-sekundaer" id="kat-add">Kategorie hinzufügen</button>
       <span class="fehler" id="kat-fehler"></span>
@@ -775,41 +816,80 @@ function zeichneKategorien() {
   const ziel = $('#kat-liste');
   if (!ziel) return;
 
-  ziel.innerHTML = state.kategorien.map((k) => `
-    <div class="kat-zeile" data-id="${k.id}">
-      <input type="text" data-feld="name" value="${esc(k.name)}">
-      <input type="number" step="any" data-feld="wertverlust_jahr_prozent"
-             value="${k.wertverlust_jahr_prozent ?? ''}" placeholder="allg.">
-      <input type="number" step="any" data-feld="wertverlust_pro_100h_prozent"
-             value="${k.wertverlust_pro_100h_prozent ?? ''}" placeholder="allg.">
-      <input type="number" step="any" data-feld="mindest_restwert_prozent"
-             value="${k.mindest_restwert_prozent ?? ''}" placeholder="allg.">
-      <button type="button" class="btn-x kat-x" title="Kategorie löschen">×</button>
-    </div>`).join('') || '<p class="mini-hinweis">Noch keine Kategorien.</p>';
+  const kf = (k, feld, label) => `
+    <label>${label}
+      <input type="number" step="any" data-feld="${feld}"
+             value="${k[feld] ?? ''}" placeholder="allg.">
+    </label>`;
 
-  ziel.querySelectorAll('.kat-zeile').forEach((zeile) => {
-    const k = state.kategorien.find((x) => x.id === zeile.dataset.id);
+  ziel.innerHTML = state.kategorien.map((k) => {
+    const baugruppen = Array.isArray(k.standard_baugruppen) ? k.standard_baugruppen : [];
+    return `
+    <div class="kat-karte" data-id="${k.id}">
+      <div class="kat-karte-kopf">
+        <input type="text" data-feld="name" class="kat-name" value="${esc(k.name)}">
+        <label class="check kat-motor">
+          <input type="checkbox" data-feld="hat_motor" ${k.hat_motor !== false ? 'checked' : ''}>
+          <span>hat eigenen Motor</span>
+        </label>
+        <button type="button" class="btn-x kat-x" title="Kategorie löschen">×</button>
+      </div>
 
-    zeile.querySelectorAll('[data-feld]').forEach((eingabe) =>
-      eingabe.addEventListener('change', async () => {
+      <div class="grid kat-faktoren">
+        ${kf(k, 'wertverlust_jahr_prozent', 'Wertverlust % / Jahr')}
+        ${kf(k, 'wertverlust_pro_100h_prozent', 'Wertverlust % / 100 h')}
+        ${kf(k, 'mindest_restwert_prozent', 'Min. Restwert %')}
+      </div>
+
+      <div class="kat-baugruppen">
+        <span class="kat-bg-titel">Baugruppen ${baugruppen.length ? `(${baugruppen.length})` : '– allgemeine Vorgabe'}</span>
+        <div class="bg-wolke">
+          ${baugruppen.map((n, i) => `
+            <span class="bg-chip">${esc(n)}<button type="button" data-bg="${i}" title="entfernen">×</button></span>`).join('')}
+          <button type="button" class="bg-add btn-klein">+ Baugruppe</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('') || '<p class="mini-hinweis">Noch keine Kategorien.</p>';
+
+  ziel.querySelectorAll('.kat-karte').forEach((karte) => {
+    const k = state.kategorien.find((x) => x.id === karte.dataset.id);
+
+    // Name + Faktoren
+    karte.querySelectorAll('input[data-feld]').forEach((eingabe) =>
+      eingabe.addEventListener('change', () => {
         const feld = eingabe.dataset.feld;
-        // Leeres Zahlenfeld -> NULL (= allgemeinen Wert verwenden), nicht 0
-        k[feld] = feld === 'name'
-          ? eingabe.value.trim()
-          : (eingabe.value.trim() === '' ? null : parseFloat(eingabe.value));
-
-        const { error } = await supabase.from('kategorien')
-          .update({ [feld]: k[feld] }).eq('id', k.id);
-        $('#kat-fehler').textContent = error
-          ? (error.code === '23505' ? 'Diesen Namen gibt es schon.' : 'Fehler: ' + error.message)
-          : '';
+        if (feld === 'hat_motor') k.hat_motor = eingabe.checked;
+        else if (feld === 'name') k.name = eingabe.value.trim();
+        else k[feld] = eingabe.value.trim() === '' ? null : parseFloat(eingabe.value);
+        speichereKategorie(k, feld);
       })
     );
 
-    zeile.querySelector('.kat-x').addEventListener('click', async () => {
+    // Baugruppe entfernen
+    karte.querySelectorAll('[data-bg]').forEach((b) =>
+      b.addEventListener('click', () => {
+        k.standard_baugruppen.splice(Number(b.dataset.bg), 1);
+        speichereKategorie(k, 'standard_baugruppen');
+        zeichneKategorien();
+      })
+    );
+
+    // Baugruppe hinzufügen
+    karte.querySelector('.bg-add').addEventListener('click', () => {
+      const name = prompt('Name der Baugruppe (z. B. Getriebe):');
+      if (!name || !name.trim()) return;
+      if (!Array.isArray(k.standard_baugruppen)) k.standard_baugruppen = [];
+      k.standard_baugruppen.push(name.trim());
+      speichereKategorie(k, 'standard_baugruppen');
+      zeichneKategorien();
+    });
+
+    // Kategorie löschen
+    karte.querySelector('.kat-x').addEventListener('click', async () => {
       const anzahl = state.machines.filter((m) => m.kategorie_id === k.id).length;
       if (!confirm(anzahl
-        ? `„${k.name}" löschen?\n\n${anzahl} Maschine(n) verlieren dadurch ihre Kategorie und rechnen wieder mit den allgemeinen Faktoren. Die Maschinen selbst bleiben erhalten.`
+        ? `„${k.name}" löschen?\n\n${anzahl} Maschine(n) verlieren dadurch ihre Kategorie. Die Maschinen selbst bleiben erhalten.`
         : `„${k.name}" löschen?`)) return;
 
       const { error } = await supabase.from('kategorien').delete().eq('id', k.id);
@@ -819,6 +899,15 @@ function zeichneKategorien() {
       zeichneKategorien();
     });
   });
+}
+
+/** Ein Feld einer Kategorie speichern. */
+async function speichereKategorie(k, feld) {
+  const { error } = await supabase.from('kategorien')
+    .update({ [feld]: k[feld] }).eq('id', k.id);
+  $('#kat-fehler').textContent = error
+    ? (error.code === '23505' ? 'Diesen Namen gibt es schon.' : 'Fehler: ' + error.message)
+    : '';
 }
 
 /** Marken als Wolke mit Löschmöglichkeit. */
