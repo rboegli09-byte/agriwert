@@ -179,6 +179,9 @@ main { padding: 1.5rem 1.2rem; max-width: 1100px; margin: 0 auto; }
   background: var(--karte); border: 1px solid var(--rahmen);
   border-radius: var(--radius); padding: 1rem 1rem 0.4rem; margin-bottom: 0.8rem;
 }
+/* Wichtig: Das hidden-Attribut allein reicht nicht, weil die display:grid-Regel
+   darüber es überstimmen würde. Diese Regel setzt das Ausblenden durch. */
+.filter-erweitert[hidden] { display: none; }
 .filter-erweitert button { margin-bottom: 0.85rem; }
 
 .ergebnis-kopf {
