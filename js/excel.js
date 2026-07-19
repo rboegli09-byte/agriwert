@@ -47,52 +47,64 @@ export async function exportiereMaschine(maschine, daten, kontext, melde = () =>
   const bewertung = bewerteMaschine(maschine, { ...daten, kategorie: kontext.kategorie }, kontext.settings);
 
   const ws = wb.addWorksheet('Bewertung', {
-    properties: { defaultRowHeight: 18 },
+    properties: { defaultRowHeight: 16 },
     pageSetup: {
       paperSize: 9,                 // A4
       orientation: 'portrait',
       fitToPage: true,
-      fitToWidth: 1,
+      fitToWidth: 1,                // exakt eine Seite breit
       fitToHeight: 0,               // beliebig viele Seiten in der Höhe
-      margins: { left: 0.5, right: 0.5, top: 0.6, bottom: 0.6, header: 0.3, footer: 0.3 },
+      margins: { left: 0.6, right: 0.6, top: 0.7, bottom: 0.7, header: 0.3, footer: 0.3 },
       horizontalCentered: true,
+      // Der Titel-Block (Zeilen 1–2) wird oben auf JEDER gedruckten Seite
+      // wiederholt – so weiss man auf Seite 2 noch, um welche Maschine es geht.
+      printTitlesRow: '1:2',
     },
     headerFooter: {
-      oddFooter: `&L${titel}&C&P / &N&R${new Date().toLocaleDateString('de-CH')}`,
+      oddFooter: `&L&"Arial"&8${titel}&C&"Arial"&8Seite &P von &N&R&"Arial"&8${new Date().toLocaleDateString('de-CH')}`,
+      evenFooter: `&L&"Arial"&8${titel}&C&"Arial"&8Seite &P von &N&R&"Arial"&8${new Date().toLocaleDateString('de-CH')}`,
     },
-    views: [{ state: 'frozen', ySplit: 0 }],
+    // Gitterlinien nicht anzeigen -> wirkt wie ein Dokument, nicht wie Tabelle
+    views: [{ showGridLines: false }],
   });
 
-  // Spaltenbreiten: Bezeichnung | Wert | Zusatz | Zusatz
+  // Spaltenbreiten so gewählt, dass die Seite auf A4 hochkant OHNE Verkleinerung
+  // passt (Summe ~88). Die vier Spalten tragen auch die vier Preis-Kacheln.
   ws.columns = [
-    { width: 28 }, { width: 30 }, { width: 22 }, { width: 26 },
+    { width: 23 }, { width: 23 }, { width: 21 }, { width: 21 },
   ];
 
   let z = 1;   // aktuelle Zeile
 
   // ==========================================================================
-  // Kopf
+  // Kopf – wird oben auf jeder gedruckten Seite wiederholt (printTitlesRow)
   // ==========================================================================
   ws.mergeCells(z, 1, z, 4);
   const kopf = ws.getCell(z, 1);
-  kopf.value = titel;
-  kopf.font = { size: 20, bold: true, color: { argb: 'FFFFFFFF' } };
+  kopf.value = {
+    richText: [
+      { text: 'AgriWert   ', font: { size: 11, bold: true, color: { argb: 'FFCFE0D6' } } },
+      { text: titel, font: { size: 18, bold: true, color: { argb: 'FFFFFFFF' } } },
+    ],
+  };
   kopf.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRUEN } };
   kopf.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
-  ws.getRow(z).height = 34;
+  ws.getRow(z).height = 32;
   z++;
 
   ws.mergeCells(z, 1, z, 4);
   const unterkopf = ws.getCell(z, 1);
-  unterkopf.value = [
+  unterkopf.value = 'Bewertungsbericht   ·   ' + [
     kontext.kategorie?.name,
     maschine.typ,
     maschine.baujahr ? `Baujahr ${maschine.baujahr}` : null,
-    `Bewertung vom ${new Date().toLocaleDateString('de-CH')}`,
-  ].filter(Boolean).join('  ·  ');
-  unterkopf.font = { size: 10, color: { argb: 'FF616B73' } };
+    `erstellt ${new Date().toLocaleDateString('de-CH')}`,
+  ].filter(Boolean).join('   ·   ');
+  unterkopf.font = { size: 9, color: { argb: 'FF616B73' } };
+  unterkopf.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRAU_HELL } };
   unterkopf.alignment = { vertical: 'middle', indent: 1 };
-  ws.getRow(z).height = 20;
+  unterkopf.border = { bottom: { style: 'thin', color: { argb: RAHMEN_FARBE } } };
+  ws.getRow(z).height = 18;
   z += 2;
 
   // ==========================================================================
@@ -179,9 +191,11 @@ export async function exportiereMaschine(maschine, daten, kontext, melde = () =>
   }
 
   // ==========================================================================
-  // Baugruppen
+  // Baugruppen – beginnt auf einer neuen Seite (klare Dokumentstruktur:
+  // Seite 1 = Übersicht/Preise/Stammdaten, ab hier der technische Teil)
   // ==========================================================================
   if (daten.baugruppen?.length) {
+    ws.getRow(z).addPageBreak();
     z = abschnitt(ws, z, 'Technische Bewertung der Baugruppen');
     z = tabelle(ws, z, ['Baugruppe', 'Note', 'Bemerkungen / Schäden', 'Reparaturkosten'],
       daten.baugruppen.map((b) => [
@@ -266,6 +280,10 @@ export async function exportiereMaschine(maschine, daten, kontext, melde = () =>
     z++;
   }
 
+  // Druckbereich auf den tatsächlich genutzten Bereich festlegen, damit beim
+  // Drucken keine leeren Spalten/Seiten mitkommen.
+  ws.pageSetup.printArea = `A1:D${z}`;
+
   // ==========================================================================
   // Fotos – auf einem eigenen Blatt, damit die Bewertung druckbar bleibt
   // ==========================================================================
@@ -317,7 +335,7 @@ function paar(ws, z, label, wert) {
   b.alignment = { vertical: 'top', wrapText: true };
   b.border = RAHMEN;
 
-  ws.getRow(z).height = zeilenHoehe(String(b.value), 78);
+  ws.getRow(z).height = zeilenHoehe(String(b.value), 60);
   return z + 1;
 }
 
@@ -356,15 +374,24 @@ function tabelle(ws, z, kopf, zeilen) {
   ws.getRow(z).height = 20;
   z++;
 
+  // Spaltenbreiten für die Zeilenhöhen-Schätzung (wie ws.columns oben)
+  const breiten = [23, 23, 21, 21];
+
   for (const zeile of zeilen) {
+    let maxZeilen = 1;
     zeile.forEach((v, i) => {
       const c = ws.getCell(z, i + 1);
       c.value = v ?? '–';
       c.font = { size: 11 };
       c.alignment = { vertical: 'top', wrapText: true, indent: 1 };
       c.border = RAHMEN;
+      // Höchste benötigte Zeilenzahl über alle Spalten der Zeile bestimmen
+      const s = String(v ?? '–');
+      const umbr = (s.match(/\n/g) || []).length;
+      const proZeile = Math.max(8, (breiten[i] ?? 21) - 3);
+      maxZeilen = Math.max(maxZeilen, Math.ceil(s.length / proZeile) + umbr);
     });
-    ws.getRow(z).height = zeilenHoehe(zeile.map(String).join(''), 100);
+    ws.getRow(z).height = Math.max(18, Math.min(maxZeilen * 14 + 4, 240));
     z++;
   }
   return z;
@@ -378,7 +405,7 @@ function fliesstext(ws, z, text) {
   c.font = { size: 11 };
   c.alignment = { vertical: 'top', wrapText: true, indent: 1 };
   c.border = RAHMEN;
-  ws.getRow(z).height = zeilenHoehe(text, 106);
+  ws.getRow(z).height = zeilenHoehe(text, 84);
   return z + 1;
 }
 
@@ -394,7 +421,15 @@ function zeilenHoehe(text, zeichenProZeile) {
 // ============================================================================
 async function fotoBlatt(wb, ExcelJS, fotos, titel, melde) {
   const ws = wb.addWorksheet('Fotos', {
-    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    pageSetup: {
+      paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      margins: { left: 0.6, right: 0.6, top: 0.7, bottom: 0.7, header: 0.3, footer: 0.3 },
+      horizontalCentered: true,
+    },
+    headerFooter: {
+      oddFooter: `&L&"Arial"&8${titel} – Fotos&R&"Arial"&8Seite &P von &N`,
+    },
+    views: [{ showGridLines: false }],
   });
   ws.columns = [{ width: 44 }, { width: 44 }];
 
