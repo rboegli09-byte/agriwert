@@ -175,8 +175,8 @@ function zeichne() {
 
     ${ctx.neu
       ? `<div class="modus-band entwurf-band">Neue Maschine – alle Reiter sind nutzbar.
-           Sie erscheint erst in der Liste, wenn du unter <b>Stammdaten</b> auf
-           <b>Maschine anlegen</b> klickst.</div>`
+           Sie wird automatisch angelegt, sobald du etwas erfasst und zurückgehst –
+           oder direkt über <b>Maschine anlegen</b>. Mit <b>Abbrechen</b> verwirfst du sie.</div>`
       : bearbeitbar()
         ? '<div class="modus-band">Bearbeitungsmodus – Änderungen werden gespeichert.</div>' : ''}
 
@@ -189,7 +189,12 @@ function zeichne() {
 
     <div id="utab-inhalt" class="formular"></div>`;
 
-  $('#zurueck', ctx.host).addEventListener('click', () => ctx.onClose());
+  $('#zurueck', ctx.host).addEventListener('click', async () => {
+    // Bei einer neuen Maschine nicht als unsichtbaren Entwurf liegen lassen:
+    // hat sie Inhalt, wird sie automatisch angelegt; ist sie leer, verworfen.
+    if (ctx.neu) await entwurfAbschliessen();
+    ctx.onClose();
+  });
   $$('[data-utab]', ctx.host).forEach((b) =>
     b.addEventListener('click', () => { ctx.tab = b.dataset.utab; zeichne(); })
   );
@@ -968,16 +973,74 @@ async function zeigeKonflikt() {
  * liegen und würde Speicher belegen.
  */
 async function verwerfeEntwurf() {
-  const hatInhalt = ctx.daten.fotos.length || ctx.daten.reifen.length ||
-    ctx.daten.schaeden.length || Object.keys(ctx.entwurf).length;
+  if (istEntwurfGefuellt() && !confirm('Erfassung abbrechen? Alle Eingaben und Fotos dieser neuen Maschine gehen verloren.')) return;
 
-  if (hatInhalt && !confirm('Erfassung abbrechen? Alle Eingaben und Fotos dieser neuen Maschine gehen verloren.')) return;
-
+  ctx.neu = false;   // verhindert, dass das Verlassen den Entwurf nochmal anlegt
   try {
     await loescheAlleFotosVonMaschine(ctx.machine.id);
     await supabase.from('machines').delete().eq('id', ctx.machine.id);
   } catch { /* Entwurf war ohnehin unsichtbar – nicht weiter stören */ }
   ctx.onClose();
+}
+
+/**
+ * Prüft, ob in einem Entwurf schon etwas Nennenswertes steht.
+ * @param {object} [daten]  optional bereits ausgelesene Stammdaten
+ */
+function istEntwurfGefuellt(daten = null) {
+  const m = daten ?? aktuelleMaschine();
+  const felder = ['hersteller', 'marke', 'modell', 'typ', 'seriennummer',
+    'fahrgestellnummer', 'baujahr', 'betriebsstunden', 'motorleistung',
+    'standort', 'besitzer', 'neupreis', 'notizen', 'servicehistorie'];
+  if (felder.some((f) => m[f] != null && m[f] !== '')) return true;
+  if (m.kategorie_id) return true;
+  if (ctx.daten.fotos.length || ctx.daten.reifen.length || ctx.daten.schaeden.length) return true;
+  // Baugruppe, die vom Standard (Note 5, keine Notiz) abweicht
+  if (ctx.daten.baugruppen.some((b) =>
+    (b.note != null && b.note !== 5) || b.bemerkungen || b.schaeden || b.reparaturbedarf)) return true;
+  return false;
+}
+
+/**
+ * Beim Verlassen einer NEUEN Maschine: hat sie Inhalt, wird sie automatisch
+ * angelegt (sichtbar in der Liste); ist sie komplett leer, wird sie verworfen.
+ * So geht eine angefangene Erfassung nicht verloren, wenn man aus Versehen
+ * zurückgeht – und es entstehen keine leeren Geister-Einträge.
+ */
+async function entwurfAbschliessen() {
+  if (!ctx.neu || !ctx.machine?.id) return;
+  ctx.neu = false;   // nur einmal behandeln
+
+  // Letzte Eingaben sofort sichern (die automatische Speicherung ist evtl.
+  // noch nicht gefeuert), damit nichts verloren geht.
+  const form = $('#stamm-form', ctx.host);
+  const daten = form ? { ...stammdatenAusFormular(form), ...bewertungsFelder() } : {};
+
+  if (!istEntwurfGefuellt(form ? daten : null)) {
+    // Nichts erfasst -> verwerfen, kein leerer Eintrag in der Liste
+    try {
+      await loescheAlleFotosVonMaschine(ctx.machine.id);
+      await supabase.from('machines').delete().eq('id', ctx.machine.id);
+    } catch { /* egal, war unsichtbar */ }
+    ctx.onGespeichert?.();
+    return;
+  }
+
+  // Inhalt vorhanden -> anlegen (sichtbar machen)
+  try {
+    if (daten.hersteller) await merkeNeueMarke(daten.hersteller);
+    await supabase.from('machines').update({ ...daten, entwurf: false }).eq('id', ctx.machine.id);
+    ctx.machine = { ...ctx.machine, ...daten, entwurf: false };
+  } catch { /* im Zweifel bleibt es Entwurf – kein Datenverlust */ }
+  ctx.onGespeichert?.();
+}
+
+/**
+ * Wird von der App aufgerufen, wenn woanders hin navigiert wird (Reiter,
+ * Abmelden). Schliesst eine offene Neu-Erfassung sauber ab.
+ */
+export async function beendeErfassungFallsEntwurf() {
+  if (ctx && ctx.neu) await entwurfAbschliessen();
 }
 
 /**

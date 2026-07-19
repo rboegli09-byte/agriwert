@@ -15,7 +15,7 @@ import { supabase, istKonfiguriert } from './supabase.js';
 import { APP_NAME } from './config.js';
 import { formatPreis, mitStandardwerten } from './pricing.js';
 import { fotoUrl } from './photos.js';
-import { renderMaschine } from './machine-form.js';
+import { renderMaschine, beendeErfassungFallsEntwurf } from './machine-form.js';
 import { renderDashboard } from './dashboard.js';
 import { STATUS, STATUS_REIHENFOLGE, statusMarke } from './status.js';
 import { esc } from './util.js';
@@ -408,16 +408,21 @@ function render() {
     <main id="content"></main>`;
 
   app().querySelectorAll('.tabs button').forEach((b) =>
-    b.addEventListener('click', () => {
+    b.addEventListener('click', async () => {
       // "Neue Maschine" legt sofort einen Entwurf an, damit alle Reiter
       // (Baugruppen, Reifen, Schäden …) von Anfang an nutzbar sind.
       if (b.dataset.tab === 'neu') { neueMaschine(); return; }
+      // Offene Neu-Erfassung nicht verlieren, wenn man weg navigiert.
+      await beendeErfassungFallsEntwurf();
       state.tab = b.dataset.tab;
       state.editMachine = null;
       render();
     })
   );
-  $('#logout').addEventListener('click', () => supabase.auth.signOut());
+  $('#logout').addEventListener('click', async () => {
+    await beendeErfassungFallsEntwurf();
+    supabase.auth.signOut();
+  });
 
   if (state.tab === 'dashboard') renderDashboard($('#content'), state);
   else if (state.tab === 'liste') renderListe();
