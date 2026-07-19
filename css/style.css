@@ -652,9 +652,18 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
 
 .ausstattung-wolke { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .aus-chip {
+  display: inline-flex; align-items: center; gap: 0.25rem;
   background: var(--akzent-schwach); color: var(--akzent);
-  border-radius: 999px; padding: 0.25rem 0.75rem; font-size: 0.9rem; font-weight: 500;
+  border-radius: 999px; padding: 0.25rem 0.35rem 0.25rem 0.75rem; font-size: 0.9rem; font-weight: 500;
 }
+.aus-chip button {
+  background: none; color: var(--akzent); border: none;
+  width: 18px; height: 18px; border-radius: 50%; line-height: 1; font-size: 0.9rem;
+}
+.aus-chip button:hover { background: var(--schlecht); color: #fff; }
+
+.eigene-ausstattung { margin-top: 1.2rem; }
+.aus-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.7rem; }
 .ausstattung-liste { display: grid; gap: 0; }
 .aus-zeile { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--rahmen); }
 .aus-summe { text-align: right; margin-top: 0.8rem; font-size: 1rem; }

@@ -1118,8 +1118,12 @@ function zeichneAusstattung(c) {
     return;
   }
 
+  // Eigene Ausstattung dieser Maschine = ausgewählt, aber nicht in der Admin-Liste
+  const eigene = gewaehlt.filter((n) => !(n in zuschlaege));
+
   c.innerHTML = `
-    <p class="mini-hinweis">Die Liste und die Zuschläge pflegt der Administrator unter „Einstellungen".</p>
+    <p class="mini-hinweis">Häkchen setzen genügt – es speichert automatisch.
+      Liste und Zuschläge pflegt der Administrator unter „Einstellungen".</p>
     <div class="checkgrid">
       ${Object.keys(zuschlaege).sort().map((name) => `
         <label class="check">
@@ -1128,25 +1132,65 @@ function zeichneAusstattung(c) {
           <em>+${formatPreis(zuschlaege[name], '')}</em>
         </label>`).join('')}
     </div>
-    <div class="formular-aktionen">
-      <button type="button" class="btn-primary" id="aus-speichern">Ausstattung speichern</button>
-      <span class="ok" id="aus-ok"></span>
-    </div>`;
 
-  const sammle = () => $$('.checkgrid input:checked', c).map((i) => i.value);
+    <fieldset class="eigene-ausstattung"><legend>Weitere Ausstattung (nur diese Maschine)</legend>
+      <div class="aus-chips">
+        ${eigene.length
+          ? eigene.map((n) => `<span class="aus-chip">${esc(n)}<button type="button" data-entf="${esc(n)}" title="entfernen">×</button></span>`).join('')
+          : '<span class="mini-hinweis">Noch keine eigene Ausstattung.</span>'}
+      </div>
+      <form class="listen-aktion" id="aus-eigen-form">
+        <input type="text" id="aus-neu" placeholder="z. B. Sonderbereifung, Zusatztank …" required>
+        <button type="submit" class="btn-sekundaer">Hinzufügen</button>
+      </form>
+      <p class="mini-hinweis">Diese Punkte zählen zur Ausstattung, bringen aber keinen
+        automatischen Zuschlag. Für einen Zuschlag den Punkt in den Einstellungen anlegen.</p>
+    </fieldset>
+    <span class="ok" id="aus-ok"></span>`;
 
-  c.addEventListener('change', () => {
-    ctx.entwurf.ausstattung = sammle();
+  const aktuelleAusstattung = () => aktuelleMaschine().ausstattung ?? [];
+
+  // Ausstattung setzen: im Entwurf merken, Preis nachrechnen, sofort speichern
+  const setzeAusstattung = async (liste) => {
+    ctx.entwurf.ausstattung = liste;
     zeichneBewertung();
+    await speichereFelder({ ausstattung: liste, ...bewertungsFelder() });
+    const ok = $('#aus-ok', c);
+    if (ok) { ok.textContent = 'Gespeichert ✓'; setTimeout(() => (ok.textContent = ''), 1500); }
+  };
+
+  // Häkchen der Admin-Liste
+  $$('.checkgrid input', c).forEach((cb) =>
+    cb.addEventListener('change', () => {
+      const admin = $$('.checkgrid input:checked', c).map((i) => i.value);
+      // Eigene (nicht in der Admin-Liste) behalten
+      const behalten = aktuelleAusstattung().filter((n) => !(n in zuschlaege));
+      setzeAusstattung([...admin, ...behalten]);
+    })
+  );
+
+  // Eigene Ausstattung hinzufügen
+  $('#aus-eigen-form', c).addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('#aus-neu', c).value.trim();
+    if (!name) return;
+    const liste = aktuelleAusstattung();
+    if (liste.some((n) => n.toLowerCase() === name.toLowerCase())) {
+      $('#aus-neu', c).value = '';
+      return;                        // gibt es schon
+    }
+    await setzeAusstattung([...liste, name]);
+    zeichneAusstattung(c);           // Chips neu zeichnen
   });
 
-  $('#aus-speichern', c).addEventListener('click', async () => {
-    ctx.entwurf.ausstattung = sammle();
-    if (ctx.neu) { $('#aus-ok', c).textContent = 'Wird beim Anlegen mitgespeichert'; return; }
-    await speichereFelder({ ausstattung: sammle(), ...bewertungsFelder() });
-    $('#aus-ok', c).textContent = 'Gespeichert';
-    setTimeout(() => ($('#aus-ok', c).textContent = ''), 2000);
-  });
+  // Eigene Ausstattung entfernen
+  $$('[data-entf]', c).forEach((b) =>
+    b.addEventListener('click', async () => {
+      const raus = b.dataset.entf;
+      await setzeAusstattung(aktuelleAusstattung().filter((n) => n !== raus));
+      zeichneAusstattung(c);
+    })
+  );
 }
 
 /** Einzelne Felder der Maschine speichern (mit Versionsprüfung). */
