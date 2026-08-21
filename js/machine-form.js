@@ -111,6 +111,14 @@ async function ladeDetails() {
 }
 
 /** Name eines Benutzers anhand seiner ID. */
+/** Initialen fuer das kleine Kuerzel-Feld, z. B. "Remo Boegli" -> "RB". */
+function initialen(name) {
+  const teile = String(name || "?").trim().split(" ").filter(Boolean);
+  if (teile.length === 0) return "?";
+  if (teile.length === 1) return teile[0].slice(0, 2).toUpperCase();
+  return (teile[0][0] + teile[teile.length - 1][0]).toUpperCase();
+}
+
 function benutzerName(id) {
   const p = ctx.profile.find((x) => x.id === id);
   return p ? (p.full_name || p.email) : 'unbekannt';
@@ -142,6 +150,11 @@ function zeichne() {
     <div class="detail-kopf">
       <div class="detail-titel">
         <button class="btn-klein" id="zurueck">← Zurück zur Liste</button>
+        <div class="erfasst-von" title="Diese Maschine wurde von ${esc(benutzerName(ctx.machine.created_by))} erfasst">
+          <span class="erfasst-kuerzel">${esc(initialen(benutzerName(ctx.machine.created_by)))}</span>
+          <span class="erfasst-text">Erfasst von <b>${esc(benutzerName(ctx.machine.created_by))}</b>
+            ${ctx.machine.created_at ? `<span class="erfasst-datum">am ${datum(ctx.machine.created_at)}</span>` : ''}</span>
+        </div>
         <h2>${esc(titel)} ${statusMarke(ctx.machine.status)}</h2>
         <p class="mini-hinweis">Zuletzt geändert ${datumZeit(ctx.machine.updated_at)} · Version ${ctx.machine.version ?? 1}</p>
       </div>
