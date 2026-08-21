@@ -120,20 +120,30 @@ export function bewerteMaschine(maschine, kontext = {}, settings = {}, jahr = ak
     note, reifen, reparaturkosten,
   }, s, jahr);
 
-  if (markt.marktwert === null) {
+  // Ein manuell eingetragener Wert schlägt die Rechnung. Der Fachmann vor Ort
+  // weiss Dinge, die keine Formel kennt (Marktlage, Nachfrage, Sonderausstattung).
+  const manuell = zahl(maschine.manueller_marktwert, null);
+  const manuellGesetzt = manuell !== null && manuell > 0;
+
+  if (markt.marktwert === null && !manuellGesetzt) {
     return {
       ...zustand, reparaturkosten,
       marktwert: null, ankaufspreis: null, eintauschpreis: null, verkaufspreis: null,
       preisband_von: null, preisband_bis: null,
+      berechneter_vorschlag: null, manuell: false,
       waehrung: s.waehrung, schritte: [], warnung: markt.warnung,
     };
   }
 
-  const mw = markt.marktwert;
+  const vorschlag = markt.marktwert === null ? null : Math.round(markt.marktwert);
+  const mw = manuellGesetzt ? manuell : markt.marktwert;
+
   return {
     ...zustand,
     reparaturkosten,
     marktwert: Math.round(mw),
+    berechneter_vorschlag: vorschlag,   // was die Formel sagen würde
+    manuell: manuellGesetzt,
     ankaufspreis: Math.round(mw * (s.ankauf_prozent / 100)),
     eintauschpreis: Math.round(mw * (s.eintausch_prozent / 100)),
     verkaufspreis: Math.round(mw * (s.verkauf_prozent / 100)),
@@ -141,7 +151,7 @@ export function bewerteMaschine(maschine, kontext = {}, settings = {}, jahr = ak
     preisband_bis: Math.round(mw * (1 + s.preisband_prozent / 100)),
     waehrung: s.waehrung,
     schritte: markt.schritte,
-    warnung: markt.warnung,
+    warnung: manuellGesetzt ? null : markt.warnung,
   };
 }
 

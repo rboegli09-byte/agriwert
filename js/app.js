@@ -14,11 +14,11 @@
 import { supabase, istKonfiguriert } from './supabase.js';
 import { APP_NAME } from './config.js';
 import { formatPreis, mitStandardwerten } from './pricing.js';
-import { fotoUrl } from './photos.js';
-import { renderMaschine, beendeErfassungFallsEntwurf } from './machine-form.js';
+import { fotoUrl, loescheAlleFotosVonMaschine } from './photos.js';
+import { renderMaschine } from './machine-form.js';
 import { renderDashboard } from './dashboard.js';
 import { STATUS, STATUS_REIHENFOLGE, statusMarke } from './status.js';
-import { esc } from './util.js';
+import { esc, datumZeit } from './util.js';
 
 // --- Zentraler Zustand -------------------------------------------------------
 const state = {
@@ -27,7 +27,8 @@ const state = {
   settings: null,    // globale Preis-Faktoren
   kategorien: [],    // Maschinentypen (Traktoren, Heuernte …) – eigene Faktoren möglich
   marken: [],        // Herstellerliste für die Auswahl
-  machines: [],      // alle Maschinen
+  machines: [],      // aktive Maschinen (ohne Papierkorb)
+  papierkorb: [],    // gelöschte Maschinen
   vorschaubilder: new Map(),   // machine_id -> ein Foto für die Listenkarte
   tab: 'dashboard',  // aktueller Reiter
   editMachine: null, // Maschine, die gerade bearbeitet wird
@@ -259,14 +260,24 @@ async function ladeListen() {
 }
 
 async function ladeMaschinen() {
-  // Entwürfe (noch nicht angelegte Maschinen) gehören nicht in die Liste.
+  // Gelöschte (im Papierkorb) gehören nicht in die normale Liste.
   const { data } = await supabase
     .from('machines')
     .select('*')
-    .eq('entwurf', false)
+    .is('geloescht_am', null)
     .order('updated_at', { ascending: false });
   state.machines = data ?? [];
   await ladeVorschaubilder();
+}
+
+/** Maschinen im Papierkorb laden. */
+async function ladePapierkorb() {
+  const { data } = await supabase
+    .from('machines')
+    .select('*')
+    .not('geloescht_am', 'is', null)
+    .order('geloescht_am', { ascending: false });
+  state.papierkorb = data ?? [];
 }
 
 /**
@@ -299,13 +310,9 @@ async function ladeVorschaubilder() {
 /**
  * Legt sofort einen Entwurf an und öffnet ihn.
  *
- * Warum überhaupt ein Entwurf? Baugruppen, Reifen, Schäden, Fotos usw. hängen
- * alle an einer Maschinen-ID. Ohne gespeicherte Maschine gäbe es diese ID
- * nicht – man könnte diese Reiter erst nach dem Speichern benutzen. Mit dem
- * Entwurf sind ALLE Reiter von der ersten Sekunde an nutzbar.
- *
- * Der Entwurf ist unsichtbar für die Liste und das Dashboard, bis er über
- * "Maschine anlegen" richtig angelegt wird.
+ * Die Maschine wird SOFORT richtig angelegt (kein Entwurf mehr): sie steht
+ * direkt in der Liste, alle Reiter sind nutzbar und jede weitere Änderung
+ * speichert automatisch. Kein zusätzliches "Anlegen"-Drücken nötig.
  */
 async function neueMaschine() {
   // Zuerst die Kategorie wählen – erst dann bekommt die Maschine die richtigen
@@ -316,7 +323,7 @@ async function neueMaschine() {
 
   const { data, error } = await supabase.from('machines').insert({
     created_by: state.user.id,
-    entwurf: true,
+    entwurf: false,              // direkt sichtbar
     zustand_gesamt: 5,
     kategorie_id: kategorieId,   // kann null sein (= ohne Kategorie)
   }).select().single();
@@ -325,6 +332,8 @@ async function neueMaschine() {
     alert('Die Maschine konnte nicht angelegt werden: ' + error.message);
     return;
   }
+  await ladeMaschinen();         // erscheint sofort in der Liste
+  state.frischAngelegt = true;   // öffnet gleich im Bearbeitungsmodus
   state.editMachine = data;
   state.tab = 'bearbeiten';
   render();
@@ -397,6 +406,7 @@ function render() {
         <button data-tab="neu"    class="${tabCls('neu')}">Neue Maschine</button>
         ${istAdmin() ? `<button data-tab="einstellungen" class="${tabCls('einstellungen')}">Einstellungen</button>` : ''}
         ${istAdmin() ? `<button data-tab="benutzer" class="${tabCls('benutzer')}">Benutzer</button>` : ''}
+        <button data-tab="papierkorb" class="${tabCls('papierkorb')}">Papierkorb</button>
         <button data-tab="konto" class="${tabCls('konto')}">Konto</button>
       </nav>
       <div class="user">
@@ -408,27 +418,23 @@ function render() {
     <main id="content"></main>`;
 
   app().querySelectorAll('.tabs button').forEach((b) =>
-    b.addEventListener('click', async () => {
-      // "Neue Maschine" legt sofort einen Entwurf an, damit alle Reiter
-      // (Baugruppen, Reifen, Schäden …) von Anfang an nutzbar sind.
+    b.addEventListener('click', () => {
+      // "Neue Maschine" legt die Maschine sofort richtig an – kein Entwurf,
+      // kein zusätzliches Bestätigen. Ab dann speichert alles automatisch.
       if (b.dataset.tab === 'neu') { neueMaschine(); return; }
-      // Offene Neu-Erfassung nicht verlieren, wenn man weg navigiert.
-      await beendeErfassungFallsEntwurf();
       state.tab = b.dataset.tab;
       state.editMachine = null;
       render();
     })
   );
-  $('#logout').addEventListener('click', async () => {
-    await beendeErfassungFallsEntwurf();
-    supabase.auth.signOut();
-  });
+  $('#logout').addEventListener('click', () => supabase.auth.signOut());
 
   if (state.tab === 'dashboard') renderDashboard($('#content'), state);
   else if (state.tab === 'liste') renderListe();
   else if (state.tab === 'neu' || state.tab === 'bearbeiten') renderFormular();
   else if (state.tab === 'einstellungen') renderEinstellungen();
   else if (state.tab === 'benutzer') renderBenutzer();
+  else if (state.tab === 'papierkorb') renderPapierkorb();
   else if (state.tab === 'konto') renderKonto();
 }
 
@@ -696,12 +702,122 @@ function oeffneMaschine(id) {
 // Baugruppen, Reifen, Schaeden, Fotos, Kommentare, Aufgaben, Vergleich, Verlauf).
 // ============================================================================
 function renderFormular() {
+  const frisch = state.frischAngelegt === true;
+  state.frischAngelegt = false;      // nur beim ersten Öffnen
   renderMaschine($('#content'), {
     machine: state.editMachine,
     state,
+    frischAngelegt: frisch,          // öffnet gleich im Bearbeitungsmodus
     onClose: () => { state.tab = 'liste'; state.editMachine = null; render(); },
     onGespeichert: async () => { await ladeMaschinen(); },
   });
+}
+
+// ============================================================================
+// PAPIERKORB – gelöschte Maschinen wiederherstellen oder endgültig löschen
+// ============================================================================
+async function renderPapierkorb() {
+  const c = $('#content');
+  c.innerHTML = '<h2>Papierkorb</h2><p class="mini-hinweis">Lade …</p>';
+
+  await ladePapierkorb();
+  const { data: profile } = await supabase.from('profiles').select('id, full_name, email');
+  const name = (id) => {
+    const p = (profile ?? []).find((x) => x.id === id);
+    return p ? (p.full_name || p.email) : 'unbekannt';
+  };
+
+  c.innerHTML = `
+    <h2>Papierkorb</h2>
+    <p class="mini-hinweis">Gelöschte Maschinen bleiben hier erhalten. Du kannst sie
+      wiederherstellen oder endgültig löschen. <b>Endgültig gelöscht ist unwiderruflich</b> –
+      inklusive Fotos, Baugruppen, Schäden und Kommentaren.</p>
+
+    ${state.papierkorb.length === 0
+      ? '<p class="leer">Der Papierkorb ist leer.</p>'
+      : `<div class="karten">
+          ${state.papierkorb.map((m) => {
+            const titel = [m.hersteller || m.marke, m.modell].filter(Boolean).join(' ') || 'Ohne Namen';
+            const wert = m.marktwert ?? m.berechneter_preis;
+            return `
+              <div class="karte papierkorb-karte" data-id="${m.id}">
+                <div class="karte-oben"><strong>${esc(titel)}</strong></div>
+                <div class="karte-daten">
+                  ${m.typ ? `<span>${esc(m.typ)}</span>` : ''}
+                  ${m.baujahr ? `<span>Bj. ${m.baujahr}</span>` : ''}
+                  ${wert != null ? `<span>${formatPreis(wert, state.settings?.waehrung)}</span>` : ''}
+                </div>
+                <p class="mini-hinweis">Gelöscht ${datumZeit(m.geloescht_am)}
+                  von ${esc(name(m.geloescht_von))}</p>
+                <div class="papierkorb-aktionen">
+                  <button type="button" class="btn-primary" data-wieder="${m.id}">Wiederherstellen</button>
+                  <button type="button" class="btn-danger" data-endgueltig="${m.id}">Endgültig löschen</button>
+                </div>
+              </div>`;
+          }).join('')}
+        </div>
+        <div class="papierkorb-fuss">
+          <button type="button" class="btn-danger" id="pk-leeren">Papierkorb leeren (${state.papierkorb.length})</button>
+        </div>`}`;
+
+  // Wiederherstellen
+  c.querySelectorAll('[data-wieder]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const { error } = await supabase.from('machines')
+        .update({ geloescht_am: null, geloescht_von: null })
+        .eq('id', b.dataset.wieder);
+      if (error) { alert('Wiederherstellen fehlgeschlagen: ' + error.message); return; }
+      await ladeMaschinen();
+      renderPapierkorb();
+    })
+  );
+
+  // Endgültig löschen
+  c.querySelectorAll('[data-endgueltig]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const m = state.papierkorb.find((x) => x.id === b.dataset.endgueltig);
+      const titel = [m.hersteller || m.marke, m.modell].filter(Boolean).join(' ') || 'diese Maschine';
+      if (!confirm(`„${titel}" ENDGÜLTIG löschen?\n\nAlle Daten und Fotos gehen unwiderruflich verloren.`)) return;
+      b.disabled = true;
+      const fehler = await endgueltigLoeschen(m.id);
+      if (fehler) { b.disabled = false; alert('Löschen fehlgeschlagen: ' + fehler); return; }
+      renderPapierkorb();
+    })
+  );
+
+  // Papierkorb leeren
+  $('#pk-leeren')?.addEventListener('click', async () => {
+    if (!confirm(`Alle ${state.papierkorb.length} Maschinen im Papierkorb ENDGÜLTIG löschen?\n\nDas kann nicht rückgängig gemacht werden.`)) return;
+    const knopf = $('#pk-leeren');
+    knopf.disabled = true;
+    for (const m of [...state.papierkorb]) {
+      knopf.textContent = 'Lösche …';
+      const fehler = await endgueltigLoeschen(m.id);
+      if (fehler) { alert('Löschen fehlgeschlagen: ' + fehler); break; }
+    }
+    renderPapierkorb();
+  });
+}
+
+/**
+ * Löscht eine Maschine endgültig – zuerst die Bilddateien, dann den Eintrag.
+ * Andersherum wüsste man die Foto-Pfade nicht mehr und die Dateien würden für
+ * immer Speicherplatz belegen.
+ * @returns {Promise<string|null>} Fehlertext oder null bei Erfolg
+ */
+async function endgueltigLoeschen(id) {
+  try {
+    await loescheAlleFotosVonMaschine(id);
+    const { error, count } = await supabase.from('machines')
+      .delete({ count: 'exact' }).eq('id', id);
+    if (error) throw error;
+    if (count === 0) {
+      return 'Nicht gelöscht. Das darf nur, wer die Maschine angelegt hat, oder ein Administrator.';
+    }
+    return null;
+  } catch (err) {
+    return err?.message || String(err);
+  }
 }
 
 // ============================================================================

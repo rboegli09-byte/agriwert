@@ -52,27 +52,23 @@ let ctx = null;
  * @param {object} optionen       { machine, state, onClose, onGespeichert }
  */
 export async function renderMaschine(host, optionen) {
-  // Eine Maschine existiert in der Datenbank immer schon – auch eine neue.
-  // Sie ist dann als "entwurf" markiert und für Liste/Dashboard unsichtbar.
-  // Dadurch sind alle Reiter von Anfang an nutzbar.
-  const istEntwurf = optionen.machine?.entwurf === true;
-
+  // Jede Maschine existiert in der Datenbank bereits – auch eine gerade neu
+  // angelegte. Dadurch sind alle Reiter von Anfang an nutzbar und jede
+  // Änderung kann sofort gespeichert werden.
   ctx = {
     host,
     state: optionen.state,
     machine: { ...optionen.machine },
-    neu: istEntwurf,
     onClose: optionen.onClose,
     onGespeichert: optionen.onGespeichert,
     tab: 'stammdaten',
-    // Ein Entwurf wird logischerweise bearbeitet. Eine bestehende Maschine
-    // öffnet sich zum ANSEHEN – erst der Stift oben rechts schaltet um.
-    modus: istEntwurf ? 'bearbeiten' : 'ansicht',
+    // Frisch angelegt -> direkt bearbeiten. Sonst zuerst nur ansehen;
+    // der Stift oben rechts schaltet um.
+    modus: optionen.frischAngelegt ? 'bearbeiten' : 'ansicht',
     daten: { baugruppen: [], reifen: [], schaeden: [], fotos: [], kommentare: [], aufgaben: [], vergleiche: [], verlauf: [] },
     freigaben: [],
     profile: [],
-    pendingFotos: [],
-    entwurf: {},          // Stammdaten-Eingaben, solange nicht gespeichert
+    entwurf: {},          // zuletzt getippte Werte (für die Live-Berechnung)
   };
 
   await ladeDetails();
@@ -135,7 +131,7 @@ function zeichne() {
     ['baugruppen', `Baugruppen (${bewerteteBaugruppen()}/${ctx.daten.baugruppen.length})`],
     ['reifen', `Reifen (${ctx.daten.reifen.length})`],
     ['schaeden', `Schäden (${ctx.daten.schaeden.length})`],
-    ['fotos', `Fotos (${ctx.daten.fotos.length + ctx.pendingFotos.length})`],
+    ['fotos', `Fotos (${ctx.daten.fotos.length})`],
     ['kommentare', `Kommentare (${ctx.daten.kommentare.length})`],
     ['aufgaben', `Aufgaben (${offeneAufgaben()})`],
     ['vergleich', `Marktvergleich (${ctx.daten.vergleiche.length})`],
@@ -146,41 +142,33 @@ function zeichne() {
     <div class="detail-kopf">
       <div class="detail-titel">
         <button class="btn-klein" id="zurueck">← Zurück zur Liste</button>
-        <h2>${esc(titel)} ${ctx.neu ? '' : statusMarke(ctx.machine.status)}</h2>
-        ${ctx.neu ? '' : `<p class="mini-hinweis">Zuletzt geändert ${datumZeit(ctx.machine.updated_at)} · Version ${ctx.machine.version ?? 1}</p>`}
+        <h2>${esc(titel)} ${statusMarke(ctx.machine.status)}</h2>
+        <p class="mini-hinweis">Zuletzt geändert ${datumZeit(ctx.machine.updated_at)} · Version ${ctx.machine.version ?? 1}</p>
       </div>
 
       <div class="detail-werkzeuge">
-        ${ctx.neu ? `
-          <button class="btn-danger" id="verwerfen-btn" title="Erfassung abbrechen">Verwerfen</button>
-        ` : `
-          <button class="btn-sekundaer" id="excel-btn" title="Diese Maschine als Excel-Datei exportieren">
-            ${ICON_EXCEL}<span>Excel</span>
-          </button>
-          ${bearbeitbar()
-            ? `<button class="btn-sekundaer" id="ansehen-btn" title="Bearbeitung beenden">
-                 ${ICON_AUGE}<span>Nur ansehen</span>
-               </button>`
-            : `<button class="btn-primary" id="bearbeiten-btn" title="Maschine bearbeiten">
-                 ${ICON_STIFT}<span>Bearbeiten</span>
-               </button>`}
-          <button class="btn-loeschen-icon" id="loeschen-oben" title="Maschine löschen">
-            ${ICON_PAPIERKORB}
-          </button>
-        `}
+        <button class="btn-sekundaer" id="excel-btn" title="Diese Maschine als Excel-Datei exportieren">
+          ${ICON_EXCEL}<span>Excel</span>
+        </button>
+        ${bearbeitbar()
+          ? `<button class="btn-sekundaer" id="ansehen-btn" title="Bearbeitung beenden">
+               ${ICON_AUGE}<span>Nur ansehen</span>
+             </button>`
+          : `<button class="btn-primary" id="bearbeiten-btn" title="Maschine bearbeiten">
+               ${ICON_STIFT}<span>Bearbeiten</span>
+             </button>`}
+        <button class="btn-loeschen-icon" id="loeschen-oben" title="In den Papierkorb legen">
+          ${ICON_PAPIERKORB}
+        </button>
       </div>
 
       <div id="bewertung-panel"></div>
     </div>
 
-    ${ctx.neu
-      ? `<div class="modus-band entwurf-band">Neue Maschine – alle Reiter sind nutzbar.
-           Sie wird automatisch angelegt, sobald du etwas erfasst und zurückgehst –
-           oder direkt über <b>Maschine anlegen</b>. Mit <b>Abbrechen</b> verwirfst du sie.</div>`
-      : bearbeitbar()
-        ? '<div class="modus-band">Bearbeitungsmodus – Änderungen werden gespeichert.</div>' : ''}
+    ${bearbeitbar()
+      ? '<div class="modus-band">Bearbeitungsmodus – jede Änderung wird automatisch gespeichert.</div>' : ''}
 
-    ${ctx.neu ? '' : '<div id="status-leiste"></div>'}
+    <div id="status-leiste"></div>
 
     <nav class="untertabs">
       ${tabs.map(([id, label]) =>
@@ -189,27 +177,21 @@ function zeichne() {
 
     <div id="utab-inhalt" class="formular"></div>`;
 
-  $('#zurueck', ctx.host).addEventListener('click', async () => {
-    // Bei einer neuen Maschine nicht als unsichtbaren Entwurf liegen lassen:
-    // hat sie Inhalt, wird sie automatisch angelegt; ist sie leer, verworfen.
-    if (ctx.neu) await entwurfAbschliessen();
-    ctx.onClose();
-  });
+  $('#zurueck', ctx.host).addEventListener('click', () => ctx.onClose());
   $$('[data-utab]', ctx.host).forEach((b) =>
     b.addEventListener('click', () => { ctx.tab = b.dataset.utab; zeichne(); })
   );
 
   $('#bearbeiten-btn', ctx.host)?.addEventListener('click', () => setzeModus('bearbeiten'));
   $('#ansehen-btn', ctx.host)?.addEventListener('click', () => {
-    ctx.entwurf = {};          // nicht gespeicherte Eingaben verwerfen
+    ctx.entwurf = {};
     setzeModus('ansicht');
   });
   $('#excel-btn', ctx.host)?.addEventListener('click', excelExportieren);
-  $('#verwerfen-btn', ctx.host)?.addEventListener('click', verwerfeEntwurf);
   $('#loeschen-oben', ctx.host)?.addEventListener('click', loescheMaschine);
 
   zeichneBewertung();
-  if (!ctx.neu) zeichneStatusLeiste();
+  zeichneStatusLeiste();
   zeichneInhalt();
 }
 
@@ -439,8 +421,12 @@ function zeichneBewertung() {
   if (!p) return;
 
   if (r.marktwert === null) {
-    p.innerHTML = `<div class="bewertung leer-bewertung">
-      <span class="mini-hinweis">${esc(r.warnung || 'Noch keine Bewertung möglich.')}</span></div>`;
+    p.innerHTML = `
+      <div class="bewertung">
+        <span class="mini-hinweis">${esc(r.warnung || 'Noch keine Bewertung möglich.')}</span>
+        ${bearbeitbar() ? wertUeberschreibenHtml(r) : ''}
+      </div>`;
+    if (bearbeitbar()) bindeWertUeberschreiben(p);
     return;
   }
 
@@ -452,7 +438,7 @@ function zeichneBewertung() {
         <span class="mini">techn. ${r.technisch ?? '–'} · opt. ${r.optisch ?? '–'}</span>
       </div>
       <div class="preisraster">
-        ${preisKachel('Marktwert', r.marktwert, r.waehrung, true)}
+        ${preisKachel('Marktwert', r.marktwert, r.waehrung, true, r.manuell)}
         ${preisKachel('Ankauf', r.ankaufspreis, r.waehrung)}
         ${preisKachel('Eintausch', r.eintauschpreis, r.waehrung)}
         ${preisKachel('Verkauf', r.verkaufspreis, r.waehrung)}
@@ -461,6 +447,11 @@ function zeichneBewertung() {
         Preisband: <b>${formatPreis(r.preisband_von, '')} – ${formatPreis(r.preisband_bis, r.waehrung)}</b>
         ${r.reparaturkosten > 0 ? `· Reparaturbedarf: <b>${formatPreis(r.reparaturkosten, r.waehrung)}</b>` : ''}
       </div>
+      ${r.manuell
+        ? `<div class="manuell-hinweis">Marktwert von Hand gesetzt.
+             Vorschlag der Berechnung: <b>${formatPreis(r.berechneter_vorschlag, r.waehrung)}</b></div>`
+        : ''}
+      ${bearbeitbar() ? wertUeberschreibenHtml(r) : ''}
       <details class="preis-details"><summary>Rechnung anzeigen</summary>
         <ul>${r.schritte.map((s) => `<li><span>${esc(s.label)}</span>
           <span><b>${formatPreis(Math.round(s.wert), '')}</b>
@@ -468,11 +459,57 @@ function zeichneBewertung() {
         ${r.warnung ? `<p class="warnung">${esc(r.warnung)}</p>` : ''}
       </details>
     </div>`;
+
+  if (bearbeitbar()) bindeWertUeberschreiben(p);
 }
 
-function preisKachel(label, wert, waehrung, gross = false) {
-  return `<div class="preis-kachel ${gross ? 'gross' : ''}">
-    <span>${label}</span><b>${formatPreis(wert, waehrung)}</b></div>`;
+/**
+ * Eingabefeld, um den berechneten Marktwert zu überschreiben.
+ * Der Fachmann vor Ort weiss Dinge, die keine Formel kennt (Marktlage,
+ * Nachfrage, Zustand im Detail). Leer lassen = wieder automatisch rechnen.
+ */
+function wertUeberschreibenHtml(r) {
+  const m = aktuelleMaschine();
+  return `
+    <div class="wert-ueberschreiben">
+      <label>Marktwert von Hand setzen
+        <input type="number" id="wert-manuell" value="${m.manueller_marktwert ?? ''}"
+               placeholder="${r.berechneter_vorschlag != null ? r.berechneter_vorschlag : 'z. B. 45000'}">
+      </label>
+      ${m.manueller_marktwert != null
+        ? '<button type="button" class="btn-klein" id="wert-zurueck">Wieder berechnen</button>'
+        : '<span class="mini-hinweis">Leer = automatisch berechnet</span>'}
+    </div>`;
+}
+
+function bindeWertUeberschreiben(p) {
+  const feld = $('#wert-manuell', p);
+  if (!feld) return;
+
+  const speichern = entprellen(async () => {
+    const wert = zuZahl(feld.value);
+    ctx.entwurf.manueller_marktwert = wert;
+    // Erst die Bewertung mit dem neuen Wert rechnen, dann speichern –
+    // sonst stünden in der Liste noch die alten Preise.
+    await speichereFelder({ manueller_marktwert: wert, ...bewertungsFelder() });
+    zeichneBewertung();
+  }, 700);
+
+  feld.addEventListener('input', () => {
+    ctx.entwurf.manueller_marktwert = zuZahl(feld.value);
+    speichern();
+  });
+
+  $('#wert-zurueck', p)?.addEventListener('click', async () => {
+    ctx.entwurf.manueller_marktwert = null;
+    await speichereFelder({ manueller_marktwert: null, ...bewertungsFelder() });
+    zeichneBewertung();
+  });
+}
+
+function preisKachel(label, wert, waehrung, gross = false, manuell = false) {
+  return `<div class="preis-kachel ${gross ? 'gross' : ''} ${manuell ? 'manuell' : ''}">
+    <span>${label}${manuell ? ' (von Hand)' : ''}</span><b>${formatPreis(wert, waehrung)}</b></div>`;
 }
 
 // ============================================================================
@@ -585,10 +622,7 @@ function zeichneStammdaten(c) {
       </fieldset>
 
       <div class="formular-aktionen">
-        ${ctx.neu
-          ? `<button type="submit" class="btn-primary btn-gross">Maschine anlegen</button>
-             <button type="button" id="verwerfen2" class="btn-klein">Abbrechen</button>`
-          : `<span class="auto-hinweis">${ICON_SPEICHER} Änderungen werden automatisch gespeichert</span>`}
+        <span class="auto-hinweis">${ICON_SPEICHER} Änderungen werden automatisch gespeichert</span>
         <span class="fehler" id="stamm-fehler"></span>
         <span class="ok" id="stamm-ok"></span>
       </div>
@@ -620,9 +654,8 @@ function zeichneStammdaten(c) {
   });
   zeigeKategorieHinweis(c);
 
-  form.addEventListener('submit', (e) => { e.preventDefault(); speichereStammdaten(form); });
-  $('#loeschen', c)?.addEventListener('click', loescheMaschine);
-  $('#verwerfen2', c)?.addEventListener('click', verwerfeEntwurf);
+  // Enter im Formular soll nichts abschicken – es speichert ja automatisch.
+  form.addEventListener('submit', (e) => e.preventDefault());
 }
 
 // ----------------------------------------------------------------------------
@@ -865,49 +898,6 @@ const autoSpeichereStammdaten = entprellen(async () => {
   }
 }, 700);
 
-async function speichereStammdaten(form) {
-  const fehler = $('#stamm-fehler', ctx.host);
-  const ok = $('#stamm-ok', ctx.host);
-  fehler.textContent = ''; ok.textContent = '';
-
-  const daten = { ...stammdatenAusFormular(form), ...bewertungsFelder() };
-
-  // Ein Entwurf wird mit dem Speichern zur richtigen Maschine und taucht
-  // ab dann in Liste und Dashboard auf.
-  const warEntwurf = ctx.neu;
-  if (warEntwurf) daten.entwurf = false;
-
-  try {
-    await merkeNeueMarke(daten.hersteller);
-
-    // --- Konflikterkennung -------------------------------------------------
-    // Nur speichern, wenn die Version noch die ist, die wir geladen haben.
-    const { data, error } = await supabase.from('machines')
-      .update(daten)
-      .eq('id', ctx.machine.id)
-      .eq('version', ctx.machine.version)
-      .select();
-
-    if (error) throw error;
-
-    if (!data || data.length === 0) {
-      await zeigeKonflikt();
-      return;
-    }
-
-    ctx.machine = data[0];
-    ctx.neu = false;
-    ctx.entwurf = {};
-    ctx.onGespeichert?.();
-    // Nach dem Speichern zurück in die Nur-Lese-Ansicht – die Bearbeitung
-    // soll nicht dauerhaft aktiv bleiben.
-    ctx.modus = 'ansicht';
-    zeichne();
-  } catch (err) {
-    fehler.textContent = 'Speichern fehlgeschlagen: ' + (err.message || err);
-  }
-}
-
 /**
  * Nimmt eine neu eingetippte Marke in die Liste auf, damit sie beim nächsten
  * Mal vorgeschlagen wird. Fehler hier dürfen das Speichern nicht verhindern –
@@ -968,129 +958,43 @@ async function zeigeKonflikt() {
 }
 
 /**
- * Erfassung abbrechen: Der Entwurf wird samt Fotos und Baugruppen gelöscht.
- * Ohne das bliebe eine leere Maschine für immer unsichtbar in der Datenbank
- * liegen und würde Speicher belegen.
- */
-async function verwerfeEntwurf() {
-  if (istEntwurfGefuellt() && !confirm('Erfassung abbrechen? Alle Eingaben und Fotos dieser neuen Maschine gehen verloren.')) return;
-
-  ctx.neu = false;   // verhindert, dass das Verlassen den Entwurf nochmal anlegt
-  try {
-    await loescheAlleFotosVonMaschine(ctx.machine.id);
-    await supabase.from('machines').delete().eq('id', ctx.machine.id);
-  } catch { /* Entwurf war ohnehin unsichtbar – nicht weiter stören */ }
-  ctx.onClose();
-}
-
-/**
- * Prüft, ob in einem Entwurf schon etwas Nennenswertes steht.
- * @param {object} [daten]  optional bereits ausgelesene Stammdaten
- */
-function istEntwurfGefuellt(daten = null) {
-  const m = daten ?? aktuelleMaschine();
-  const felder = ['hersteller', 'marke', 'modell', 'typ', 'seriennummer',
-    'fahrgestellnummer', 'baujahr', 'betriebsstunden', 'motorleistung',
-    'standort', 'besitzer', 'neupreis', 'notizen', 'servicehistorie'];
-  if (felder.some((f) => m[f] != null && m[f] !== '')) return true;
-  if (m.kategorie_id) return true;
-  if (ctx.daten.fotos.length || ctx.daten.reifen.length || ctx.daten.schaeden.length) return true;
-  // Baugruppe, die vom Standard (Note 5, keine Notiz) abweicht
-  if (ctx.daten.baugruppen.some((b) =>
-    (b.note != null && b.note !== 5) || b.bemerkungen || b.schaeden || b.reparaturbedarf)) return true;
-  return false;
-}
-
-/**
- * Beim Verlassen einer NEUEN Maschine: hat sie Inhalt, wird sie automatisch
- * angelegt (sichtbar in der Liste); ist sie komplett leer, wird sie verworfen.
- * So geht eine angefangene Erfassung nicht verloren, wenn man aus Versehen
- * zurückgeht – und es entstehen keine leeren Geister-Einträge.
- */
-async function entwurfAbschliessen() {
-  if (!ctx.neu || !ctx.machine?.id) return;
-  ctx.neu = false;   // nur einmal behandeln
-
-  // Letzte Eingaben sofort sichern (die automatische Speicherung ist evtl.
-  // noch nicht gefeuert), damit nichts verloren geht.
-  const form = $('#stamm-form', ctx.host);
-  const daten = form ? { ...stammdatenAusFormular(form), ...bewertungsFelder() } : {};
-
-  if (!istEntwurfGefuellt(form ? daten : null)) {
-    // Nichts erfasst -> verwerfen, kein leerer Eintrag in der Liste
-    try {
-      await loescheAlleFotosVonMaschine(ctx.machine.id);
-      await supabase.from('machines').delete().eq('id', ctx.machine.id);
-    } catch { /* egal, war unsichtbar */ }
-    ctx.onGespeichert?.();
-    return;
-  }
-
-  // Inhalt vorhanden -> anlegen (sichtbar machen)
-  try {
-    if (daten.hersteller) await merkeNeueMarke(daten.hersteller);
-    await supabase.from('machines').update({ ...daten, entwurf: false }).eq('id', ctx.machine.id);
-    ctx.machine = { ...ctx.machine, ...daten, entwurf: false };
-  } catch { /* im Zweifel bleibt es Entwurf – kein Datenverlust */ }
-  ctx.onGespeichert?.();
-}
-
-/**
- * Wird von der App aufgerufen, wenn woanders hin navigiert wird (Reiter,
- * Abmelden). Schliesst eine offene Neu-Erfassung sauber ab.
- */
-export async function beendeErfassungFallsEntwurf() {
-  if (ctx && ctx.neu) await entwurfAbschliessen();
-}
-
-/**
- * Löscht die Maschine mit allem, was daran hängt.
+ * Legt die Maschine in den Papierkorb (Soft-Delete).
  *
- * Reihenfolge ist wichtig: ZUERST die Bilddateien aus dem Speicher, DANN die
- * Maschine. Andersherum wäre die machine_photos-Tabelle schon leer (cascade)
- * und wir wüssten nicht mehr, welche Dateien zu löschen sind – sie würden für
- * immer Speicherplatz belegen.
+ * Es wird NICHT wirklich gelöscht, sondern nur "geloescht_am" gesetzt. Damit
+ * verschwindet sie aus Liste und Dashboard, lässt sich aber jederzeit
+ * wiederherstellen. Endgültig gelöscht wird erst im Papierkorb.
  */
 async function loescheMaschine() {
   const titel = [ctx.machine.hersteller || ctx.machine.marke, ctx.machine.modell]
     .filter(Boolean).join(' ') || 'diese Maschine';
-  const anzahlFotos = ctx.daten.fotos.length;
 
   if (!confirm(
-    `„${titel}" wirklich löschen?\n\n` +
-    'Gelöscht werden: Stammdaten, alle Baugruppen-Bewertungen, Reifen, ' +
-    `Schäden, Kommentare, Aufgaben, Vergleichsmaschinen${anzahlFotos ? ` und ${anzahlFotos} Foto(s)` : ''}.\n\n` +
-    'Das kann NICHT rückgängig gemacht werden.'
+    `„${titel}" in den Papierkorb legen?\n\n` +
+    'Die Maschine verschwindet aus der Liste, bleibt aber im Papierkorb ' +
+    'erhalten und kann dort wiederhergestellt werden.'
   )) return;
 
-  // Der Knopf kann oben im Kopf ODER unten im Formular sitzen – beide sperren.
-  const knoepfe = [$('#loeschen', ctx.host), $('#loeschen-oben', ctx.host)].filter(Boolean);
-  knoepfe.forEach((k) => { k.disabled = true; });
+  const knopf = $('#loeschen-oben', ctx.host);
+  if (knopf) knopf.disabled = true;
 
   try {
-    // 1) Bilddateien aus dem Speicher entfernen. Muss VOR dem Löschen der
-    //    Maschine passieren – danach wüssten wir die Pfade nicht mehr.
-    await loescheAlleFotosVonMaschine(ctx.machine.id);
-
-    // 2) Maschine löschen – die Datenbank räumt alles Verknüpfte mit weg
-    const { error, count } = await supabase.from('machines')
-      .delete({ count: 'exact' }).eq('id', ctx.machine.id);
+    const { data, error } = await supabase.from('machines')
+      .update({ geloescht_am: new Date().toISOString(), geloescht_von: ctx.state.user.id })
+      .eq('id', ctx.machine.id)
+      .select();
     if (error) throw error;
 
-    // Kein Fehler, aber auch nichts gelöscht = die Sicherheitsregel hat es
+    // Kein Fehler, aber nichts geändert = die Sicherheitsregel hat es
     // stillschweigend verhindert. Das darf nicht unbemerkt bleiben.
-    if (count === 0) {
-      throw new Error('Die Maschine wurde nicht gelöscht. Das darf nur, wer sie angelegt hat, oder ein Administrator.');
+    if (!data || data.length === 0) {
+      throw new Error('Nicht in den Papierkorb gelegt. Das darf nur, wer die Maschine angelegt hat, oder ein Administrator.');
     }
 
     ctx.onGespeichert?.();
     ctx.onClose();
   } catch (err) {
-    knoepfe.forEach((k) => { k.disabled = false; });
-    const text = err?.message || String(err);
-    const meldung = 'Löschen fehlgeschlagen: ' + text;
-
-    // Im Bearbeitungsmodus gibt es ein Fehlerfeld, in der Ansicht nicht.
+    if (knopf) knopf.disabled = false;
+    const meldung = 'Fehlgeschlagen: ' + (err?.message || String(err));
     const feld = $('#stamm-fehler', ctx.host);
     if (feld) feld.textContent = meldung;
     else alert(meldung);

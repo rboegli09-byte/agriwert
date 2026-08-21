@@ -798,6 +798,27 @@ h2.abschnitt { margin: 1.8rem 0 0.7rem; font-size: 0.95rem; }
 .dialog h3 { margin: 0 0 1rem; font-size: 1.1rem; }
 .dialog-aktionen { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.5rem; }
 
+/* --- Marktwert von Hand setzen --------------------------------------------- */
+.wert-ueberschreiben {
+  display: flex; align-items: flex-end; gap: 0.6rem; flex-wrap: wrap;
+  border-top: 1px solid var(--rahmen); margin-top: 0.7rem; padding-top: 0.7rem;
+}
+.wert-ueberschreiben label { margin: 0; flex: 1; min-width: 150px; font-size: 0.8rem; }
+.wert-ueberschreiben input { margin-top: 0.2rem; }
+.preis-kachel.manuell { border-left: 3px solid var(--mittel); }
+.preis-kachel.manuell b { color: var(--mittel); }
+.manuell-hinweis {
+  font-size: 0.8rem; color: var(--mittel); margin-top: 0.5rem;
+}
+.manuell-hinweis b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* --- Papierkorb ------------------------------------------------------------ */
+.papierkorb-karte { cursor: default; opacity: 0.9; }
+.papierkorb-karte:hover { border-color: var(--rahmen); }
+.papierkorb-aktionen { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.7rem; }
+.papierkorb-aktionen button { flex: 1; white-space: nowrap; font-size: 0.85rem; padding: 0.5rem 0.7rem; }
+.papierkorb-fuss { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--rahmen); }
+
 /* --- Hinweisboxen ---------------------------------------------------------- */
 .hinweis-box {
   max-width: 560px; margin: 4rem auto; background: var(--karte);
