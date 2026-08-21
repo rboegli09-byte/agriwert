@@ -136,11 +136,17 @@ async function zeigeVerkaeufer(machines, w, preis) {
   const ziel = $('#dash-verkaeufer');
   if (!ziel) return;
 
-  const { data: profile } = await supabase.from('profiles').select('id, full_name, email, role');
+  // select('*'), damit die Abfrage auch dann laeuft, wenn die Spalte
+  // in_auswertung in der Datenbank noch fehlt.
+  const { data: profile } = await supabase.from('profiles').select('*');
+  const profilVon = (id) => (profile ?? []).find((x) => x.id === id);
   const name = (id) => {
-    const p = (profile ?? []).find((x) => x.id === id);
+    const p = profilVon(id);
     return p ? (p.full_name || p.email) : 'unbekannt';
   };
+  // Fehlt die Spalte, gilt jeder als "zaehlt mit" - niemand verschwindet
+  // versehentlich aus der Auswertung.
+  const zaehltMit = (id) => profilVon(id)?.in_auswertung !== false;
 
   const proPerson = new Map();
   for (const m of machines) {
@@ -151,22 +157,31 @@ async function zeigeVerkaeufer(machines, w, preis) {
     proPerson.set(schluessel, eintrag);
   }
 
-  const zeilen = [...proPerson.entries()]
-    .map(([id, v]) => ({ name: name(id), ...v }))
-    .sort((a, b) => b.wert - a.wert);
+  const alleZeilen = [...proPerson.entries()].map(([id, v]) => ({ id, name: name(id), ...v }));
+  const zeilen = alleZeilen.filter((z) => zaehltMit(z.id)).sort((a, b) => b.wert - a.wert);
+  const ausgeblendet = alleZeilen.filter((z) => !zaehltMit(z.id));
+  const ausgeblendeteMaschinen = ausgeblendet.reduce((s, z) => s + z.anzahl, 0);
 
   ziel.innerHTML = `
-    <table class="tabelle">
-      <thead><tr><th>Person</th><th>Maschinen</th><th class="zahl">Erfasster Wert</th></tr></thead>
-      <tbody>
-        ${zeilen.map((z) => `
-          <tr>
-            <td>${esc(z.name)}</td>
-            <td>${z.anzahl}</td>
-            <td class="zahl">${formatPreis(z.wert, w)}</td>
-          </tr>`).join('')}
-      </tbody>
-    </table>`;
+    ${zeilen.length === 0
+      ? '<p class="mini-hinweis">Keine Erfassungen von auswertungsrelevanten Personen.</p>'
+      : `<table class="tabelle">
+          <thead><tr><th>Person</th><th>Maschinen</th><th class="zahl">Erfasster Wert</th></tr></thead>
+          <tbody>
+            ${zeilen.map((z) => `
+              <tr>
+                <td class="haupt-zelle">${esc(z.name)}</td>
+                <td data-label="Maschinen">${z.anzahl}</td>
+                <td data-label="Erfasster Wert" class="zahl">${formatPreis(z.wert, w)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`}
+
+    ${ausgeblendeteMaschinen > 0
+      ? `<p class="mini-hinweis">${ausgeblendeteMaschinen} Maschine(n) von Verwaltungskonten
+          (${ausgeblendet.map((z) => esc(z.name)).join(', ')}) sind hier nicht aufgeführt,
+          zählen aber weiterhin zum Bestand oben. Einstellbar unter <b>Benutzer</b>.</p>`
+      : ''}`;
 }
 
 // ============================================================================

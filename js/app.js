@@ -1163,7 +1163,7 @@ async function renderBenutzer() {
 
     <h2 class="abschnitt">Angemeldete Benutzer</h2>
     <table class="tabelle">
-      <thead><tr><th>Name / E-Mail</th><th>Rolle</th></tr></thead>
+      <thead><tr><th>Name / E-Mail</th><th>Rolle</th><th>In Auswertung</th></tr></thead>
       <tbody>
         ${(profile ?? []).map((p) => `
           <tr>
@@ -1172,6 +1172,12 @@ async function renderBenutzer() {
               <select data-user="${p.id}" ${p.id === state.user.id ? 'disabled title="Die eigene Rolle kann nicht geändert werden"' : ''}>
                 ${ROLLEN.map((r) => `<option value="${r}" ${p.role === r ? 'selected' : ''}>${r}</option>`).join('')}
               </select>
+            </td>
+            <td data-label="In Auswertung">
+              <label class="check auswertung-check" title="Verwaltungskonten aus der Auswertung ausblenden">
+                <input type="checkbox" data-auswertung="${p.id}" ${p.in_auswertung !== false ? 'checked' : ''}>
+                <span>zählt mit</span>
+              </label>
             </td>
           </tr>`).join('')}
       </tbody>
@@ -1208,6 +1214,20 @@ async function renderBenutzer() {
   );
 
   // Rolle ändern
+  // Verwaltungskonten aus der Dashboard-Auswertung ausblenden
+  c.querySelectorAll('[data-auswertung]').forEach((cb) =>
+    cb.addEventListener('change', async () => {
+      const { error } = await supabase.from('profiles')
+        .update({ in_auswertung: cb.checked }).eq('id', cb.dataset.auswertung);
+      if (error) {
+        cb.checked = !cb.checked;   // nichts gespeichert -> Anzeige zurücksetzen
+        alert(/column .* does not exist/i.test(error.message)
+          ? 'Dafür fehlt noch eine Spalte in der Datenbank. Bitte das SQL für die Auswertung ausführen.'
+          : 'Fehler: ' + error.message);
+      }
+    })
+  );
+
   c.querySelectorAll('select[data-user]').forEach((sel) =>
     sel.addEventListener('change', async () => {
       const { error } = await supabase.from('profiles')
